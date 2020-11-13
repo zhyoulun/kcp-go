@@ -671,6 +671,7 @@ func (s *UDPSession) packetInput(data []byte) {
 	}
 }
 
+//这里的data已经去掉了nonce和crc32
 func (s *UDPSession) kcpInput(data []byte) {
 	var kcpInErrors, fecErrs, fecRecovered, fecParityShards uint64
 
@@ -789,7 +790,7 @@ type (
 )
 
 // packet input stage
-func (l *Listener) packetInput(data []byte, addr net.Addr) {
+func (l *Listener) packetInput(data []byte, remoteAddr net.Addr) {
 	decrypted := false
 	if l.block != nil && len(data) >= cryptHeaderSize {
 		l.block.Decrypt(data, data)
@@ -805,9 +806,10 @@ func (l *Listener) packetInput(data []byte, addr net.Addr) {
 		decrypted = true
 	}
 
+	// 这里有一个问题，就是如果data的长度过短，小于24，就直接被丢弃了
 	if decrypted && len(data) >= IKCP_OVERHEAD {
 		l.sessionLock.RLock()
-		s, ok := l.sessions[addr.String()]
+		s, ok := l.sessions[remoteAddr.String()]
 		l.sessionLock.RUnlock()
 
 		var conv, sn uint32
@@ -838,10 +840,10 @@ func (l *Listener) packetInput(data []byte, addr net.Addr) {
 
 		if s == nil && convRecovered { // new session
 			if len(l.chAccepts) < cap(l.chAccepts) { // do not let the new sessions overwhelm accept queue
-				s := newUDPSession(conv, l.dataShards, l.parityShards, l, l.conn, false, addr, l.block)
+				s := newUDPSession(conv, l.dataShards, l.parityShards, l, l.conn, false, remoteAddr, l.block)
 				s.kcpInput(data)
 				l.sessionLock.Lock()
-				l.sessions[addr.String()] = s
+				l.sessions[remoteAddr.String()] = s
 				l.sessionLock.Unlock()
 				l.chAccepts <- s
 			}
@@ -978,8 +980,8 @@ func (l *Listener) closeSession(remote net.Addr) (ret bool) {
 // Addr returns the listener's network address, The Addr returned is shared by all invocations of Addr, so do not modify it.
 func (l *Listener) Addr() net.Addr { return l.conn.LocalAddr() }
 
-// Listen listens for incoming KCP packets addressed to the local address laddr on the network "udp",
-func Listen(laddr string) (net.Listener, error) { return ListenWithOptions(laddr, nil, 0, 0) }
+//// Listen listens for incoming KCP packets addressed to the local address laddr on the network "udp",
+//func Listen(laddr string) (net.Listener, error) { return ListenWithOptions(laddr, nil, 0, 0) }
 
 // ListenWithOptions listens for incoming KCP packets addressed to the local address laddr on the network "udp" with packet encryption.
 //
@@ -1001,10 +1003,10 @@ func ListenWithOptions(laddr string, block BlockCrypt, dataShards, parityShards 
 	return serveConn(block, dataShards, parityShards, conn, true)
 }
 
-// ServeConn serves KCP protocol for a single packet connection.
-func ServeConn(block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*Listener, error) {
-	return serveConn(block, dataShards, parityShards, conn, false)
-}
+//// ServeConn serves KCP protocol for a single packet connection.
+//func ServeConn(block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*Listener, error) {
+//	return serveConn(block, dataShards, parityShards, conn, false)
+//}
 
 func serveConn(block BlockCrypt, dataShards, parityShards int, conn net.PacketConn, ownConn bool) (*Listener, error) {
 	l := new(Listener)
@@ -1053,23 +1055,23 @@ func DialWithOptions(raddr string, block BlockCrypt, dataShards, parityShards in
 	return newUDPSession(convid, dataShards, parityShards, nil, conn, true, udpaddr, block), nil
 }
 
-// NewConn3 establishes a session and talks KCP protocol over a packet connection.
-func NewConn3(convid uint32, raddr net.Addr, block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*UDPSession, error) {
-	return newUDPSession(convid, dataShards, parityShards, nil, conn, false, raddr, block), nil
-}
+//// NewConn3 establishes a session and talks KCP protocol over a packet connection.
+//func NewConn3(convid uint32, raddr net.Addr, block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*UDPSession, error) {
+//	return newUDPSession(convid, dataShards, parityShards, nil, conn, false, raddr, block), nil
+//}
 
-// NewConn2 establishes a session and talks KCP protocol over a packet connection.
-func NewConn2(raddr net.Addr, block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*UDPSession, error) {
-	var convid uint32
-	binary.Read(rand.Reader, binary.LittleEndian, &convid)
-	return NewConn3(convid, raddr, block, dataShards, parityShards, conn)
-}
+//// NewConn2 establishes a session and talks KCP protocol over a packet connection.
+//func NewConn2(raddr net.Addr, block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*UDPSession, error) {
+//	var convid uint32
+//	binary.Read(rand.Reader, binary.LittleEndian, &convid)
+//	return NewConn3(convid, raddr, block, dataShards, parityShards, conn)
+//}
 
-// NewConn establishes a session and talks KCP protocol over a packet connection.
-func NewConn(raddr string, block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*UDPSession, error) {
-	udpaddr, err := net.ResolveUDPAddr("udp", raddr)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	return NewConn2(udpaddr, block, dataShards, parityShards, conn)
-}
+//// NewConn establishes a session and talks KCP protocol over a packet connection.
+//func NewConn(raddr string, block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*UDPSession, error) {
+//	udpaddr, err := net.ResolveUDPAddr("udp", raddr)
+//	if err != nil {
+//		return nil, errors.WithStack(err)
+//	}
+//	return NewConn2(udpaddr, block, dataShards, parityShards, conn)
+//}

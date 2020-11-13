@@ -29,8 +29,8 @@ func (s *UDPSession) defaultReadLoop() {
 func (l *Listener) defaultMonitor() {
 	buf := make([]byte, mtuLimit)
 	for {
-		if n, from, err := l.conn.ReadFrom(buf); err == nil {
-			l.packetInput(buf[:n], from)
+		if n, remoteAddr, err := l.conn.ReadFrom(buf); err == nil {
+			l.packetInput(buf[:n], remoteAddr)
 		} else {
 			l.notifyReadError(errors.WithStack(err))
 			return
