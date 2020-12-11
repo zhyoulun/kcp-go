@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	IKCP_RTO_NDL     = 30  // no delay min rto
+	IKCP_RTO_NODELAY = 30  // no delay min rto   retransmission timeout (RTO)，重传超时。
 	IKCP_RTO_MIN     = 100 // normal min rto
 	IKCP_RTO_DEF     = 200
 	IKCP_RTO_MAX     = 60000
@@ -76,6 +76,7 @@ func ikcp_decode32u(p []byte, l *uint32) []byte {
 	return p[4:]
 }
 
+//求最小值
 func _imin_(a, b uint32) uint32 {
 	if a <= b {
 		return a
@@ -83,6 +84,7 @@ func _imin_(a, b uint32) uint32 {
 	return b
 }
 
+//求最大值
 func _imax_(a, b uint32) uint32 {
 	if a >= b {
 		return a
@@ -131,19 +133,44 @@ func (seg *segment) encode(ptr []byte) []byte {
 
 // KCP defines a single KCP connection
 type KCP struct {
-	conv, mtu, mss, state                  uint32
-	snd_una, snd_nxt, rcv_nxt              uint32
-	ssthresh                               uint32
-	rx_rttvar, rx_srtt                     int32
-	rx_rto, rx_minrto                      uint32
-	snd_wnd, rcv_wnd, rmt_wnd, cwnd, probe uint32
-	interval, ts_flush                     uint32
-	nodelay, updated                       uint32
-	ts_probe, probe_wait                   uint32
-	dead_link, incr                        uint32
+	conv  uint32
+	mtu   uint32//默认值IKCP_MTU_DEF（1400），需要函数SetMtu设置，最大传输单元（英语：Maximum Transmission Unit，缩写MTU）
+	mss   uint32//默认值kcp.mtu - IKCP_OVERHEAD（24），最大分段大小（Maximum Segment Size）
+	state uint32
 
-	fastresend     int32
-	nocwnd, stream int32
+	snd_una uint32 //The sender of data keeps track of the oldest unacknowledged sequence number in the variable SND.UNA.
+	snd_nxt uint32 //The sender of data keeps track of the next sequence number to use in the variable SND.NXT.
+	rcv_nxt uint32 //The receiver of data keeps track of the next sequence number to expect in the variable RCV.NXT.
+
+	ssthresh uint32
+
+	rx_rttvar int32
+	rx_srtt   int32
+
+	rx_rto    uint32
+	rx_minrto uint32
+
+	snd_wnd uint32
+	rcv_wnd uint32
+	rmt_wnd uint32
+	cwnd    uint32
+	probe   uint32
+
+	interval uint32
+	ts_flush uint32
+
+	nodelay uint32 //是否启用 nodelay模式，0不启用；1启用。   默认值为0
+	updated uint32
+
+	ts_probe   uint32
+	probe_wait uint32
+
+	dead_link uint32
+	incr      uint32
+
+	fastresend int32
+	nocwnd     int32
+	stream     int32
 
 	snd_queue []segment
 	rcv_queue []segment
@@ -152,7 +179,7 @@ type KCP struct {
 
 	acklist []ackItem
 
-	buffer   []byte
+	buffer   []byte//初始空间mtu，make([]byte, kcp.mtu)
 	reserved int
 	output   output_callback
 }
@@ -370,8 +397,11 @@ func (kcp *KCP) Send(buffer []byte) int {
 	return 0
 }
 
+//更新rto，KCP结构体中rx_rto变量
 func (kcp *KCP) update_ack(rtt int32) {
 	// https://tools.ietf.org/html/rfc6298
+	// srtt: smoothed round-trip time
+	// rttvar: round-trip time variation
 	var rto uint32
 	if kcp.rx_srtt == 0 {
 		kcp.rx_srtt = rtt
@@ -392,7 +422,7 @@ func (kcp *KCP) update_ack(rtt int32) {
 		}
 	}
 	rto = uint32(kcp.rx_srtt) + _imax_(kcp.interval, uint32(kcp.rx_rttvar)<<2)
-	kcp.rx_rto = _ibound_(kcp.rx_minrto, rto, IKCP_RTO_MAX)
+	kcp.rx_rto = _ibound_(kcp.rx_minrto, rto, IKCP_RTO_MAX) //rx_minrto的值是IKCP_RTO_NODELAY或者IKCP_RTO_MIN
 }
 
 func (kcp *KCP) shrink_buf() {
@@ -405,6 +435,8 @@ func (kcp *KCP) shrink_buf() {
 }
 
 func (kcp *KCP) parse_ack(sn uint32) {
+	//sn<kcp.snd_una已经收到ack，这个ack可以忽略了
+	//sn>=kcp.snd_nxt这是一个不合法的ack，忽略
 	if _itimediff(sn, kcp.snd_una) < 0 || _itimediff(sn, kcp.snd_nxt) >= 0 {
 		return
 	}
@@ -420,6 +452,7 @@ func (kcp *KCP) parse_ack(sn uint32) {
 			kcp.delSegment(seg)
 			break
 		}
+		//sn<seg.sn
 		if _itimediff(sn, seg.sn) < 0 {
 			break
 		}
@@ -427,6 +460,8 @@ func (kcp *KCP) parse_ack(sn uint32) {
 }
 
 func (kcp *KCP) parse_fastack(sn, ts uint32) {
+	//sn<kcp.snd_una已经收到ack，这个ack可以忽略了
+	//sn>=kcp.snd_nxt这是一个不合法的ack，忽略
 	if _itimediff(sn, kcp.snd_una) < 0 || _itimediff(sn, kcp.snd_nxt) >= 0 {
 		return
 	}
@@ -441,6 +476,7 @@ func (kcp *KCP) parse_fastack(sn, ts uint32) {
 	}
 }
 
+//根据对端的ack包中的una信息，清理snd_buf头部的无用数据
 func (kcp *KCP) parse_una(una uint32) int {
 	count := 0
 	for k := range kcp.snd_buf {
@@ -542,7 +578,7 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 		var wnd uint16
 		var cmd, frg uint8
 
-		if len(data) < int(IKCP_OVERHEAD) {
+		if len(data) < IKCP_OVERHEAD {
 			break
 		}
 
@@ -576,12 +612,12 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 		}
 		kcp.shrink_buf()
 
-		if cmd == IKCP_CMD_ACK {
+		if cmd == IKCP_CMD_ACK {//对端发过来的ack包
 			kcp.parse_ack(sn)
 			kcp.parse_fastack(sn, ts)
 			flag |= 1
 			latest = ts
-		} else if cmd == IKCP_CMD_PUSH {
+		} else if cmd == IKCP_CMD_PUSH {//对端发过来的数据包
 			repeat := true
 			if _itimediff(sn, kcp.rcv_nxt+kcp.rcv_wnd) < 0 {
 				kcp.ack_push(sn, ts)
@@ -601,7 +637,7 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 			if regular && repeat {
 				atomic.AddUint64(&DefaultSnmp.RepeatSegs, 1)
 			}
-		} else if cmd == IKCP_CMD_WASK {
+		} else if cmd == IKCP_CMD_WASK {//对端在问本端的窗口大小
 			// ready to send back IKCP_CMD_WINS in Ikcp_flush
 			// tell remote my window size
 			kcp.probe |= IKCP_ASK_TELL
@@ -627,6 +663,7 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 
 	// cwnd update when packet arrived
 	if kcp.nocwnd == 0 {
+		//新的snd_una比旧的snd_una大，说明收到合法的数据包了
 		if _itimediff(kcp.snd_una, snd_una) > 0 {
 			if kcp.cwnd < kcp.rmt_wnd {
 				mss := kcp.mss
@@ -1009,11 +1046,12 @@ func (kcp *KCP) SetMtu(mtu int) int {
 // interval: internal update timer interval in millisec, default is 100ms
 // resend: 0:disable fast resend(default), 1:enable fast resend
 // nc: 0:normal congestion control(default), 1:disable congestion control
+// 这个函数暂时没有调用者
 func (kcp *KCP) NoDelay(nodelay, interval, resend, nc int) int {
 	if nodelay >= 0 {
 		kcp.nodelay = uint32(nodelay)
 		if nodelay != 0 {
-			kcp.rx_minrto = IKCP_RTO_NDL
+			kcp.rx_minrto = IKCP_RTO_NODELAY
 		} else {
 			kcp.rx_minrto = IKCP_RTO_MIN
 		}

@@ -770,7 +770,7 @@ type (
 		dataShards   int            // FEC data shard
 		parityShards int            // FEC parity shard
 		conn         net.PacketConn // the underlying packet connection
-		ownConn      bool           // true if we created conn internally, false if provided by caller
+		//ownConn      bool           // true if we created conn internally, false if provided by caller
 
 		sessions        map[string]*UDPSession // all sessions accepted by this Listener
 		sessionLock     sync.RWMutex
@@ -957,9 +957,7 @@ func (l *Listener) Close() error {
 
 	var err error
 	if once {
-		if l.ownConn {
-			err = l.conn.Close()
-		}
+		err = l.conn.Close()
 	} else {
 		err = errors.WithStack(io.ErrClosedPipe)
 	}
@@ -1000,7 +998,7 @@ func ListenWithOptions(laddr string, block BlockCrypt, dataShards, parityShards 
 		return nil, errors.WithStack(err)
 	}
 
-	return serveConn(block, dataShards, parityShards, conn, true)
+	return serveConn(block, dataShards, parityShards, conn)
 }
 
 //// ServeConn serves KCP protocol for a single packet connection.
@@ -1008,10 +1006,10 @@ func ListenWithOptions(laddr string, block BlockCrypt, dataShards, parityShards 
 //	return serveConn(block, dataShards, parityShards, conn, false)
 //}
 
-func serveConn(block BlockCrypt, dataShards, parityShards int, conn net.PacketConn, ownConn bool) (*Listener, error) {
+func serveConn(block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*Listener, error) {
 	l := new(Listener)
 	l.conn = conn
-	l.ownConn = ownConn
+	//l.ownConn = ownConn
 	l.sessions = make(map[string]*UDPSession)
 	l.chAccepts = make(chan *UDPSession, acceptBacklog)
 	l.chSessionClosed = make(chan net.Addr)
