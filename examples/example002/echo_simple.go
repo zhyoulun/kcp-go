@@ -12,7 +12,7 @@ func main() {
 	//key := pbkdf2.Key([]byte("demo pass"), []byte("demo salt"), 1024, 32, sha1.New)
 	//block, _ := kcp.NewAESBlockCrypt(key)
 	//if listener, err := kcp.ListenWithOptions("127.0.0.1:12345", block, 10, 3); err == nil {
-	if listener, err := kcp.ListenWithOptions("127.0.0.1:12345", nil, 10, 3); err == nil {
+	if listener, err := kcp.ListenWithOptions("127.0.0.1:12345"); err == nil {
 		// spin-up the client
 		go client()
 		for {
@@ -54,7 +54,7 @@ func client() {
 
 	// dial to the echo server
 	//if sess, err := kcp.DialWithOptions("127.0.0.1:12345", block, 10, 3); err == nil {
-	if sess, err := kcp.DialWithOptions("127.0.0.1:12345", nil, 10, 3); err == nil {
+	if sess, err := kcp.DialWithOptions("127.0.0.1:12345"); err == nil {
 		for {
 			data := time.Now().String()
 			buf := make([]byte, len(data))

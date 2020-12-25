@@ -1,5 +1,3 @@
-// +build !linux
-
 package kcp
 
 func (s *UDPSession) readLoop() {
