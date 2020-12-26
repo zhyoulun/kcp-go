@@ -5,6 +5,10 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
+func (s *UDPSession) tx(txqueue []ipv4.Message) {
+	s.defaultTx(txqueue)
+}
+
 func (s *UDPSession) defaultTx(txqueue []ipv4.Message) {
 	nbytes := 0
 	npkts := 0

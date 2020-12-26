@@ -28,6 +28,8 @@ const (
 	IKCP_PROBE_INIT  = 7000   // 7 secs to probe window size
 	IKCP_PROBE_LIMIT = 120000 // up to 120 secs to probe window
 	IKCP_SN_OFFSET   = 12
+
+	IKCP_MSS = IKCP_MTU_DEF - IKCP_OVERHEAD
 )
 
 // monotonic reference time point
@@ -134,9 +136,9 @@ func (seg *segment) encode(ptr []byte) []byte {
 
 // KCP defines a single KCP connection
 type KCP struct {
-	conv  uint32 //conversation 会话
-	mtu   uint32 //默认值IKCP_MTU_DEF（1400），需要函数SetMtu设置，最大传输单元（英语：Maximum Transmission Unit，缩写MTU）
-	mss   uint32 //默认值kcp.mtu - IKCP_OVERHEAD（24），最大分段大小（Maximum Segment Size）
+	conv uint32 //conversation 会话
+	//mtu   uint32 //默认值IKCP_MTU_DEF（1400），需要函数SetMtu设置，最大传输单元（英语：Maximum Transmission Unit，缩写MTU）
+	//mss   uint32 //默认值kcp.mtu - IKCP_OVERHEAD（24），最大分段大小（Maximum Segment Size）
 	state uint32
 
 	snd_una uint32 //The sender of data keeps track of the oldest unacknowledged sequence number in the variable SND.UNA.
@@ -145,19 +147,20 @@ type KCP struct {
 
 	ssthresh uint32
 
-	rx_rttvar int32
-	rx_srtt   int32
+	//如果没有查看的需求，这两个变量可以调整为计算rto函数的局部变量
+	//rx_rttvar int32
+	//rx_srtt   int32
 
-	rx_rto    uint32
-	rx_minrto uint32
+	rx_rto uint32
+	//rx_minrto uint32
 
 	snd_wnd uint32
 	rcv_wnd uint32
-	rmt_wnd uint32
-	cwnd    uint32
+	rmt_wnd uint32 //应该是remote_wnd
+	cwnd    uint32 //congesion window，拥塞窗口
 	probe   uint32
 
-	interval uint32
+	//interval uint32
 	ts_flush uint32
 
 	nodelay uint32 //是否启用 nodelay模式，0不启用；1启用。   默认值为0
@@ -174,7 +177,7 @@ type KCP struct {
 	stream int32
 
 	snd_queue []segment
-	rcv_queue []segment
+	rcv_queue []segment //长度受到rcv_wnd的限制
 	snd_buf   []segment
 	rcv_buf   []segment
 
@@ -195,18 +198,19 @@ type ackItem struct {
 // 'conv' must be equal in the connection peers, or else data will be silently rejected.
 //
 // 'output' function will be called whenever these is data to be sent on wire.
+
 func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp := new(KCP)
 	kcp.conv = conv
 	kcp.snd_wnd = IKCP_WND_SND
 	kcp.rcv_wnd = IKCP_WND_RCV
 	kcp.rmt_wnd = IKCP_WND_RCV
-	kcp.mtu = IKCP_MTU_DEF
-	kcp.mss = kcp.mtu - IKCP_OVERHEAD
-	kcp.buffer = make([]byte, kcp.mtu)
+	//kcp.mtu = IKCP_MTU_DEF
+	//kcp.mss = IKCP_MTU_DEF - IKCP_OVERHEAD
+	kcp.buffer = make([]byte, IKCP_MTU_DEF)
 	kcp.rx_rto = IKCP_RTO_DEF
-	kcp.rx_minrto = IKCP_RTO_MIN
-	kcp.interval = IKCP_INTERVAL
+	//kcp.rx_minrto = IKCP_RTO_MIN
+	//kcp.interval = IKCP_INTERVAL
 	kcp.ts_flush = IKCP_INTERVAL
 	kcp.ssthresh = IKCP_THRESH_INIT
 	kcp.dead_link = IKCP_DEADLINK
@@ -228,18 +232,19 @@ func (kcp *KCP) delSegment(seg *segment) {
 	}
 }
 
-// ReserveBytes keeps n bytes untouched from the beginning of the buffer,
-// the output_callback function should be aware of this.
+//// ReserveBytes keeps n bytes untouched from the beginning of the buffer,
+//// the output_callback function should be aware of this.
+////
+//// Return false if n >= mss
 //
-// Return false if n >= mss
-func (kcp *KCP) ReserveBytes(n int) bool {
-	if n >= int(kcp.mtu-IKCP_OVERHEAD) || n < 0 {
-		return false
-	}
-	kcp.reserved = n
-	kcp.mss = kcp.mtu - IKCP_OVERHEAD - uint32(n)
-	return true
-}
+//func (kcp *KCP) ReserveBytes(n int) bool {
+//	if n >= int(kcp.mtu-IKCP_OVERHEAD) || n < 0 {
+//		return false
+//	}
+//	kcp.reserved = n
+//	kcp.mss = kcp.mtu - IKCP_OVERHEAD - uint32(n)
+//	return true
+//}
 
 // PeekSize checks the size of next message in the recv queue
 func (kcp *KCP) PeekSize() (length int) {
@@ -343,8 +348,8 @@ func (kcp *KCP) Send(buffer []byte) int {
 		n := len(kcp.snd_queue)
 		if n > 0 {
 			seg := &kcp.snd_queue[n-1]
-			if len(seg.data) < int(kcp.mss) {
-				capacity := int(kcp.mss) - len(seg.data)
+			if len(seg.data) < IKCP_MSS {
+				capacity := IKCP_MSS - len(seg.data)
 				extend := capacity
 				if len(buffer) < capacity {
 					extend = len(buffer)
@@ -364,10 +369,10 @@ func (kcp *KCP) Send(buffer []byte) int {
 		}
 	}
 
-	if len(buffer) <= int(kcp.mss) {
+	if len(buffer) <= IKCP_MSS {
 		count = 1
 	} else {
-		count = (len(buffer) + int(kcp.mss) - 1) / int(kcp.mss)
+		count = (len(buffer) + IKCP_MSS - 1) / IKCP_MSS
 	}
 
 	if count > 255 {
@@ -380,8 +385,8 @@ func (kcp *KCP) Send(buffer []byte) int {
 
 	for i := 0; i < count; i++ {
 		var size int
-		if len(buffer) > int(kcp.mss) {
-			size = int(kcp.mss)
+		if len(buffer) > IKCP_MSS {
+			size = IKCP_MSS
 		} else {
 			size = len(buffer)
 		}
@@ -399,34 +404,38 @@ func (kcp *KCP) Send(buffer []byte) int {
 }
 
 //更新rto，KCP结构体中rx_rto变量
-func (kcp *KCP) update_ack(rtt int32) {
+func (kcp *KCP) update_rto(rtt int32) {
 	// https://tools.ietf.org/html/rfc6298
 	// srtt: smoothed round-trip time
 	// rttvar: round-trip time variation
 	var rto uint32
-	if kcp.rx_srtt == 0 {
-		kcp.rx_srtt = rtt
-		kcp.rx_rttvar = rtt >> 1
+	var rx_srtt int32
+	var rx_rttvar int32
+	if rx_srtt == 0 {
+		rx_srtt = rtt
+		rx_rttvar = rtt >> 1
 	} else {
-		delta := rtt - kcp.rx_srtt
-		kcp.rx_srtt += delta >> 3
+		delta := rtt - rx_srtt
+		rx_srtt += delta >> 3
 		if delta < 0 {
 			delta = -delta
 		}
-		if rtt < kcp.rx_srtt-kcp.rx_rttvar {
+		if rtt < rx_srtt-rx_rttvar {
 			// if the new RTT sample is below the bottom of the range of
 			// what an RTT measurement is expected to be.
 			// give an 8x reduced weight versus its normal weighting
-			kcp.rx_rttvar += (delta - kcp.rx_rttvar) >> 5
+			rx_rttvar += (delta - rx_rttvar) >> 5
 		} else {
-			kcp.rx_rttvar += (delta - kcp.rx_rttvar) >> 2
+			rx_rttvar += (delta - rx_rttvar) >> 2
 		}
 	}
-	rto = uint32(kcp.rx_srtt) + _imax_(kcp.interval, uint32(kcp.rx_rttvar)<<2)
-	kcp.rx_rto = _ibound_(kcp.rx_minrto, rto, IKCP_RTO_MAX) //rx_minrto的值是IKCP_RTO_NODELAY或者IKCP_RTO_MIN
+	rto = uint32(rx_srtt) + _imax_(IKCP_INTERVAL, uint32(rx_rttvar)<<2)
+	kcp.rx_rto = _ibound_(IKCP_RTO_MIN, rto, IKCP_RTO_MAX) //rx_minrto的值是IKCP_RTO_NODELAY或者IKCP_RTO_MIN
 }
 
 func (kcp *KCP) shrink_buf() {
+	//如果snd_buf不为空，则snd_una为第一个seg的sn
+	//否则如果snd_buf为空，snd_una=snd_nxt
 	if len(kcp.snd_buf) > 0 {
 		seg := &kcp.snd_buf[0]
 		kcp.snd_una = seg.sn
@@ -506,20 +515,24 @@ func (kcp *KCP) ack_push(sn, ts uint32) {
 // returns true if data has repeated
 func (kcp *KCP) parse_data(newseg segment) bool {
 	sn := newseg.sn
+	//sn>=kcp.rcv_nxt+kcp.rcv_wnd
+	//sn<kcp.rcv_nxt
+	//sn在接收窗口之外，放弃处理
 	if _itimediff(sn, kcp.rcv_nxt+kcp.rcv_wnd) >= 0 ||
 		_itimediff(sn, kcp.rcv_nxt) < 0 {
 		return true
 	}
 
 	n := len(kcp.rcv_buf) - 1
-	insert_idx := 0
+	insert_idx := 0 //找到在rev_buf中待插入的位置
 	repeat := false
-	for i := n; i >= 0; i-- {
+	for i := len(kcp.rcv_buf) - 1; i >= 0; i-- {
 		seg := &kcp.rcv_buf[i]
 		if seg.sn == sn {
 			repeat = true
 			break
 		}
+		//sn>seg.sn
 		if _itimediff(sn, seg.sn) > 0 {
 			insert_idx = i + 1
 			break
@@ -528,7 +541,7 @@ func (kcp *KCP) parse_data(newseg segment) bool {
 
 	if !repeat {
 		// replicate the content if it's new
-		dataCopy := xmitBuf.Get().([]byte)[:len(newseg.data)]
+		dataCopy := xmitBuf.Get().([]byte)[:len(newseg.data)] //将mtulimit buf中的数据转存到xmitBuf缓存区中
 		copy(dataCopy, newseg.data)
 		newseg.data = dataCopy
 
@@ -576,7 +589,7 @@ func (kcp *KCP) Input(data []byte) int {
 
 	var latest uint32 // the latest ack packet
 	var flag int      //标识是否收到了ack包
-	var inSegs uint64
+	//var inSegs uint64
 	var windowSlides bool
 
 	for {
@@ -612,12 +625,12 @@ func (kcp *KCP) Input(data []byte) int {
 
 		// only trust window updates from regular packets. i.e: latest update
 		//if regular {
-		kcp.rmt_wnd = uint32(wnd) //从对端接收到的wnd信息
+		kcp.rmt_wnd = uint32(wnd) //从对端接收到的wnd信息，应该是remote_wnd
 		//}
 		if kcp.parse_una(una) > 0 {
 			windowSlides = true
 		}
-		kcp.shrink_buf()
+		kcp.shrink_buf() //这里可能会更新kcp.snd_una
 
 		if cmd == IKCP_CMD_ACK { //对端发过来的ack包
 			kcp.parse_ack(sn)
@@ -626,8 +639,10 @@ func (kcp *KCP) Input(data []byte) int {
 			latest = ts
 		} else if cmd == IKCP_CMD_PUSH { //对端发过来的数据包
 			//repeat := true
+			//sn<kcp.rcv_nxt+kcp.rcv_wnd，接收到的数据，在接收窗口内
 			if _itimediff(sn, kcp.rcv_nxt+kcp.rcv_wnd) < 0 {
-				kcp.ack_push(sn, ts)
+				kcp.ack_push(sn, ts) //准备ack
+				//sn>=kcp.rev_nxt，在接收窗口区间
 				if _itimediff(sn, kcp.rcv_nxt) >= 0 {
 					var seg segment
 					seg.conv = conv
@@ -637,6 +652,7 @@ func (kcp *KCP) Input(data []byte) int {
 					seg.ts = ts
 					seg.sn = sn
 					seg.una = una
+					//data自带length信息
 					seg.data = data[:length] // delayed data copying
 					//repeat = kcp.parse_data(seg)
 					kcp.parse_data(seg)
@@ -655,47 +671,49 @@ func (kcp *KCP) Input(data []byte) int {
 			return -3
 		}
 
-		inSegs++
+		//inSegs++
 		data = data[length:]
 	}
 	//atomic.AddUint64(&DefaultSnmp.InSegs, inSegs)
 
 	// update rtt with the latest ts
+	//收到了ack包，就可以更新rtt了
 	// ignore the FEC packet
 	//if flag != 0 && regular {
 	if flag != 0 {
 		current := currentMs()
 		//current >= latest
 		if _itimediff(current, latest) >= 0 {
-			kcp.update_ack(_itimediff(current, latest))
+			kcp.update_rto(_itimediff(current, latest))
 		}
 	}
 
 	//// cwnd update when packet arrived
 	//if kcp.nocwnd == 0 {
 	//新的snd_una比旧的snd_una大，说明收到合法的数据包了
+	// kcp.snd_una>snd_una
 	if _itimediff(kcp.snd_una, snd_una) > 0 {
-		if kcp.cwnd < kcp.rmt_wnd {
-			mss := kcp.mss
+		if kcp.cwnd < kcp.rmt_wnd { //如果本端cwnd比对端rmt_wnd小
+			//mss := uint32(IKCP_MSS)
 			if kcp.cwnd < kcp.ssthresh {
 				kcp.cwnd++
-				kcp.incr += mss
+				kcp.incr += IKCP_MSS
 			} else {
-				if kcp.incr < mss {
-					kcp.incr = mss
+				if kcp.incr < IKCP_MSS {
+					kcp.incr = IKCP_MSS
 				}
-				kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
-				if (kcp.cwnd+1)*mss <= kcp.incr {
-					if mss > 0 {
-						kcp.cwnd = (kcp.incr + mss - 1) / mss
-					} else {
-						kcp.cwnd = kcp.incr + mss - 1
-					}
+				kcp.incr += (IKCP_MSS*IKCP_MSS)/kcp.incr + (IKCP_MSS / 16)
+				if (kcp.cwnd+1)*IKCP_MSS <= kcp.incr {
+					//if IKCP_MSS > 0 {
+					kcp.cwnd = (kcp.incr + IKCP_MSS - 1) / IKCP_MSS
+					//} else {
+					//	kcp.cwnd = kcp.incr + mss - 1
+					//}
 				}
 			}
 			if kcp.cwnd > kcp.rmt_wnd {
 				kcp.cwnd = kcp.rmt_wnd
-				kcp.incr = kcp.rmt_wnd * mss
+				kcp.incr = kcp.rmt_wnd * IKCP_MSS
 			}
 		}
 	}
@@ -731,7 +749,7 @@ func (kcp *KCP) flush() uint32 {
 	// makeSpace makes room for writing
 	makeSpace := func(space int) {
 		size := len(buffer) - len(ptr)
-		if size+space > int(kcp.mtu) {
+		if size+space > IKCP_MTU_DEF {
 			kcp.output(buffer, size)
 			ptr = buffer[kcp.reserved:]
 		}
@@ -834,7 +852,7 @@ func (kcp *KCP) flush() uint32 {
 	// check for retransmissions
 	current := currentMs()
 	var change, lostSegs, fastRetransSegs, earlyRetransSegs uint64
-	minrto := int32(kcp.interval)
+	minrto := int32(IKCP_INTERVAL)
 
 	ref := kcp.snd_buf[:len(kcp.snd_buf)] // for bounds check elimination
 	for k := range ref {
@@ -928,7 +946,7 @@ func (kcp *KCP) flush() uint32 {
 			kcp.ssthresh = IKCP_THRESH_MIN
 		}
 		kcp.cwnd = kcp.ssthresh + resent
-		kcp.incr = kcp.cwnd * kcp.mss
+		kcp.incr = kcp.cwnd * IKCP_MSS
 	}
 
 	// congestion control, https://tools.ietf.org/html/rfc5681
@@ -938,12 +956,12 @@ func (kcp *KCP) flush() uint32 {
 			kcp.ssthresh = IKCP_THRESH_MIN
 		}
 		kcp.cwnd = 1
-		kcp.incr = kcp.mss
+		kcp.incr = IKCP_MSS
 	}
 
 	if kcp.cwnd < 1 {
 		kcp.cwnd = 1
-		kcp.incr = kcp.mss
+		kcp.incr = IKCP_MSS
 	}
 	//}
 
@@ -972,9 +990,9 @@ func (kcp *KCP) Update() {
 	}
 
 	if slap >= 0 {
-		kcp.ts_flush += kcp.interval
+		kcp.ts_flush += IKCP_INTERVAL
 		if _itimediff(current, kcp.ts_flush) >= 0 {
-			kcp.ts_flush = current + kcp.interval
+			kcp.ts_flush = current + IKCP_INTERVAL
 		}
 		//kcp.flush(false)
 		kcp.flush()
@@ -1026,31 +1044,31 @@ func (kcp *KCP) Check() uint32 {
 	if tm_packet >= tm_flush {
 		minimal = uint32(tm_flush)
 	}
-	if minimal >= kcp.interval {
-		minimal = kcp.interval
+	if minimal >= IKCP_INTERVAL {
+		minimal = IKCP_INTERVAL
 	}
 
 	return current + minimal
 }
 
-// SetMtu changes MTU size, default is 1400
-func (kcp *KCP) SetMtu(mtu int) int {
-	if mtu < 50 || mtu < IKCP_OVERHEAD {
-		return -1
-	}
-	if kcp.reserved >= int(kcp.mtu-IKCP_OVERHEAD) || kcp.reserved < 0 {
-		return -1
-	}
-
-	buffer := make([]byte, mtu)
-	if buffer == nil {
-		return -2
-	}
-	kcp.mtu = uint32(mtu)
-	kcp.mss = kcp.mtu - IKCP_OVERHEAD - uint32(kcp.reserved)
-	kcp.buffer = buffer
-	return 0
-}
+//// SetMtu changes MTU size, default is 1400
+//func (kcp *KCP) SetMtu(mtu int) int {
+//	if mtu < 50 || mtu < IKCP_OVERHEAD {
+//		return -1
+//	}
+//	if kcp.reserved >= int(kcp.mtu-IKCP_OVERHEAD) || kcp.reserved < 0 {
+//		return -1
+//	}
+//
+//	buffer := make([]byte, mtu)
+//	if buffer == nil {
+//		return -2
+//	}
+//	kcp.mtu = uint32(mtu)
+//	kcp.mss = kcp.mtu - IKCP_OVERHEAD - uint32(kcp.reserved)
+//	kcp.buffer = buffer
+//	return 0
+//}
 
 //// NoDelay options
 //// fastest: ikcp_nodelay(kcp, 1, 20, 2, 1)

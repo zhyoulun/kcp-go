@@ -74,10 +74,10 @@ type (
 		//fecEncoder *fecEncoder
 
 		// settings
-		remote     net.Addr  // remote peer address
-		rd         time.Time // read deadline
-		wd         time.Time // write deadline
-		headerSize int       // the header size additional to a KCP frame
+		remote net.Addr  // remote peer address
+		rd     time.Time // read deadline
+		wd     time.Time // write deadline
+		//headerSize int       // the header size additional to a KCP frame
 		//ackNoDelay bool      // send ack immediately for each incoming packet(testing purpose)
 		writeDelay bool // delay kcp.flush() for Write() for bulk transfer
 		dup        int  // duplicate udp packets(testing purpose)
@@ -100,7 +100,7 @@ type (
 		//nonce Entropy
 
 		// packets waiting to be sent on wire
-		txqueue []ipv4.Message
+		txqueue []ipv4.Message //发送队列
 		//xconn           batchConn // for x/net
 		xconnWriteError error
 
@@ -168,11 +168,12 @@ func newUDPSession(conv uint32, l *Listener, conn net.PacketConn, ownConn bool, 
 	//}
 
 	sess.kcp = NewKCP(conv, func(buf []byte, size int) {
-		if size >= IKCP_OVERHEAD+sess.headerSize {
+		//if size >= IKCP_OVERHEAD+sess.headerSize {
+		if size >= IKCP_OVERHEAD {
 			sess.output(buf[:size])
 		}
 	})
-	sess.kcp.ReserveBytes(sess.headerSize)
+	//sess.kcp.ReserveBytes(sess.headerSize)
 
 	if sess.l == nil { // it's a client connection
 		go sess.readLoop()
@@ -281,12 +282,12 @@ func (s *UDPSession) WriteBuffers(v [][]byte) (n int, err error) {
 			for _, b := range v {
 				n += len(b)
 				for {
-					if len(b) <= int(s.kcp.mss) {
+					if len(b) <= IKCP_MSS {
 						s.kcp.Send(b)
 						break
 					} else {
-						s.kcp.Send(b[:s.kcp.mss])
-						b = b[s.kcp.mss:]
+						s.kcp.Send(b[:IKCP_MSS])
+						b = b[IKCP_MSS:]
 					}
 				}
 			}
@@ -331,6 +332,7 @@ func (s *UDPSession) WriteBuffers(v [][]byte) (n int, err error) {
 }
 
 // uncork sends data in txqueue if there is any
+// 将txqueue中的数据发送出去
 func (s *UDPSession) uncork() {
 	if len(s.txqueue) > 0 {
 		s.tx(s.txqueue)
@@ -541,7 +543,7 @@ func (s *UDPSession) SetDUP(dup int) {
 // 3. Encryption
 // 4. TxQueue
 func (s *UDPSession) output(buf []byte) {
-	var ecc [][]byte
+	//var ecc [][]byte
 
 	//// 1. FEC encoding
 	//if s.fecEncoder != nil {
@@ -573,13 +575,13 @@ func (s *UDPSession) output(buf []byte) {
 		s.txqueue = append(s.txqueue, msg)
 	}
 
-	for k := range ecc {
-		bts := xmitBuf.Get().([]byte)[:len(ecc[k])]
-		copy(bts, ecc[k])
-		msg.Buffers = [][]byte{bts}
-		msg.Addr = s.remote
-		s.txqueue = append(s.txqueue, msg)
-	}
+	//for k := range ecc {
+	//	bts := xmitBuf.Get().([]byte)[:len(ecc[k])]
+	//	copy(bts, ecc[k])
+	//	msg.Buffers = [][]byte{bts}
+	//	msg.Addr = s.remote
+	//	s.txqueue = append(s.txqueue, msg)
+	//}
 }
 
 // sess update to trigger protocol
@@ -611,19 +613,19 @@ func (s *UDPSession) GetRTO() uint32 {
 	return s.kcp.rx_rto
 }
 
-// GetSRTT gets current srtt of the session
-func (s *UDPSession) GetSRTT() int32 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.kcp.rx_srtt
-}
+//// GetSRTT gets current srtt of the session
+//func (s *UDPSession) GetSRTT() int32 {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	return s.kcp.rx_srtt
+//}
 
-// GetRTTVar gets current rtt variance of the session
-func (s *UDPSession) GetSRTTVar() int32 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.kcp.rx_rttvar
-}
+//// GetRTTVar gets current rtt variance of the session
+//func (s *UDPSession) GetSRTTVar() int32 {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	return s.kcp.rx_rttvar
+//}
 
 func (s *UDPSession) notifyReadEvent() {
 	select {
