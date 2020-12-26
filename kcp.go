@@ -968,88 +968,88 @@ func (kcp *KCP) flush() uint32 {
 	return uint32(minrto)
 }
 
-// (deprecated)
+//// (deprecated)
+////
+//// Update updates state (call it repeatedly, every 10ms-100ms), or you can ask
+//// ikcp_check when to call it again (without ikcp_input/_send calling).
+//// 'current' - current timestamp in millisec.
+//func (kcp *KCP) Update() {
+//	var slap int32
 //
-// Update updates state (call it repeatedly, every 10ms-100ms), or you can ask
-// ikcp_check when to call it again (without ikcp_input/_send calling).
-// 'current' - current timestamp in millisec.
-func (kcp *KCP) Update() {
-	var slap int32
-
-	current := currentMs()
-	if kcp.updated == 0 {
-		kcp.updated = 1
-		kcp.ts_flush = current
-	}
-
-	slap = _itimediff(current, kcp.ts_flush)
-
-	if slap >= 10000 || slap < -10000 {
-		kcp.ts_flush = current
-		slap = 0
-	}
-
-	if slap >= 0 {
-		kcp.ts_flush += IKCP_INTERVAL
-		if _itimediff(current, kcp.ts_flush) >= 0 {
-			kcp.ts_flush = current + IKCP_INTERVAL
-		}
-		//kcp.flush(false)
-		kcp.flush()
-	}
-}
-
-// (deprecated)
+//	current := currentMs()
+//	if kcp.updated == 0 {
+//		kcp.updated = 1
+//		kcp.ts_flush = current
+//	}
 //
-// Check determines when should you invoke ikcp_update:
-// returns when you should invoke ikcp_update in millisec, if there
-// is no ikcp_input/_send calling. you can call ikcp_update in that
-// time, instead of call update repeatly.
-// Important to reduce unnacessary ikcp_update invoking. use it to
-// schedule ikcp_update (eg. implementing an epoll-like mechanism,
-// or optimize ikcp_update when handling massive kcp connections)
-func (kcp *KCP) Check() uint32 {
-	current := currentMs()
-	ts_flush := kcp.ts_flush
-	tm_flush := int32(0x7fffffff)
-	tm_packet := int32(0x7fffffff)
-	minimal := uint32(0)
-	if kcp.updated == 0 {
-		return current
-	}
+//	slap = _itimediff(current, kcp.ts_flush)
+//
+//	if slap >= 10000 || slap < -10000 {
+//		kcp.ts_flush = current
+//		slap = 0
+//	}
+//
+//	if slap >= 0 {
+//		kcp.ts_flush += IKCP_INTERVAL
+//		if _itimediff(current, kcp.ts_flush) >= 0 {
+//			kcp.ts_flush = current + IKCP_INTERVAL
+//		}
+//		//kcp.flush(false)
+//		kcp.flush()
+//	}
+//}
 
-	if _itimediff(current, ts_flush) >= 10000 ||
-		_itimediff(current, ts_flush) < -10000 {
-		ts_flush = current
-	}
-
-	if _itimediff(current, ts_flush) >= 0 {
-		return current
-	}
-
-	tm_flush = _itimediff(ts_flush, current)
-
-	for k := range kcp.snd_buf {
-		seg := &kcp.snd_buf[k]
-		diff := _itimediff(seg.resendts, current)
-		if diff <= 0 {
-			return current
-		}
-		if diff < tm_packet {
-			tm_packet = diff
-		}
-	}
-
-	minimal = uint32(tm_packet)
-	if tm_packet >= tm_flush {
-		minimal = uint32(tm_flush)
-	}
-	if minimal >= IKCP_INTERVAL {
-		minimal = IKCP_INTERVAL
-	}
-
-	return current + minimal
-}
+//// (deprecated)
+////
+//// Check determines when should you invoke ikcp_update:
+//// returns when you should invoke ikcp_update in millisec, if there
+//// is no ikcp_input/_send calling. you can call ikcp_update in that
+//// time, instead of call update repeatly.
+//// Important to reduce unnacessary ikcp_update invoking. use it to
+//// schedule ikcp_update (eg. implementing an epoll-like mechanism,
+//// or optimize ikcp_update when handling massive kcp connections)
+//func (kcp *KCP) Check() uint32 {
+//	current := currentMs()
+//	ts_flush := kcp.ts_flush
+//	tm_flush := int32(0x7fffffff)
+//	tm_packet := int32(0x7fffffff)
+//	minimal := uint32(0)
+//	if kcp.updated == 0 {
+//		return current
+//	}
+//
+//	if _itimediff(current, ts_flush) >= 10000 ||
+//		_itimediff(current, ts_flush) < -10000 {
+//		ts_flush = current
+//	}
+//
+//	if _itimediff(current, ts_flush) >= 0 {
+//		return current
+//	}
+//
+//	tm_flush = _itimediff(ts_flush, current)
+//
+//	for k := range kcp.snd_buf {
+//		seg := &kcp.snd_buf[k]
+//		diff := _itimediff(seg.resendts, current)
+//		if diff <= 0 {
+//			return current
+//		}
+//		if diff < tm_packet {
+//			tm_packet = diff
+//		}
+//	}
+//
+//	minimal = uint32(tm_packet)
+//	if tm_packet >= tm_flush {
+//		minimal = uint32(tm_flush)
+//	}
+//	if minimal >= IKCP_INTERVAL {
+//		minimal = IKCP_INTERVAL
+//	}
+//
+//	return current + minimal
+//}
 
 //// SetMtu changes MTU size, default is 1400
 //func (kcp *KCP) SetMtu(mtu int) int {
@@ -1103,16 +1103,16 @@ func (kcp *KCP) Check() uint32 {
 //	return 0
 //}
 
-// WndSize sets maximum window size: sndwnd=32, rcvwnd=32 by default
-func (kcp *KCP) WndSize(sndwnd, rcvwnd int) int {
-	if sndwnd > 0 {
-		kcp.snd_wnd = uint32(sndwnd)
-	}
-	if rcvwnd > 0 {
-		kcp.rcv_wnd = uint32(rcvwnd)
-	}
-	return 0
-}
+//// WndSize sets maximum window size: sndwnd=32, rcvwnd=32 by default
+//func (kcp *KCP) WndSize(sndwnd, rcvwnd int) int {
+//	if sndwnd > 0 {
+//		kcp.snd_wnd = uint32(sndwnd)
+//	}
+//	if rcvwnd > 0 {
+//		kcp.rcv_wnd = uint32(rcvwnd)
+//	}
+//	return 0
+//}
 
 // WaitSnd gets how many packet is waiting to be sent
 func (kcp *KCP) WaitSnd() int {

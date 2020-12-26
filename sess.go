@@ -21,14 +21,14 @@ import (
 )
 
 const (
-	// 16-bytes nonce for each packet
-	nonceSize = 16
+	//// 16-bytes nonce for each packet
+	//nonceSize = 16
+	//
+	//// 4-bytes packet checksum
+	//crcSize = 4
 
-	// 4-bytes packet checksum
-	crcSize = 4
-
-	// overall crypto header size
-	cryptHeaderSize = nonceSize + crcSize
+	//// overall crypto header size
+	//cryptHeaderSize = nonceSize + crcSize
 
 	// maximum packet size
 	mtuLimit = 1500
@@ -38,7 +38,7 @@ const (
 )
 
 var (
-	errInvalidOperation = errors.New("invalid operation")
+	//errInvalidOperation = errors.New("invalid operation")
 	errTimeout          = errors.New("timeout")
 )
 
@@ -79,7 +79,7 @@ type (
 		wd     time.Time // write deadline
 		//headerSize int       // the header size additional to a KCP frame
 		//ackNoDelay bool      // send ack immediately for each incoming packet(testing purpose)
-		writeDelay bool // delay kcp.flush() for Write() for bulk transfer
+		//writeDelay bool // delay kcp.flush() for Write() for bulk transfer
 		dup        int  // duplicate udp packets(testing purpose)
 
 		// notifications
@@ -107,17 +107,17 @@ type (
 		mu sync.Mutex
 	}
 
-	setReadBuffer interface {
-		SetReadBuffer(bytes int) error
-	}
-
-	setWriteBuffer interface {
-		SetWriteBuffer(bytes int) error
-	}
-
-	setDSCP interface {
-		SetDSCP(int) error
-	}
+	//setReadBuffer interface {
+	//	SetReadBuffer(bytes int) error
+	//}
+	//
+	//setWriteBuffer interface {
+	//	SetWriteBuffer(bytes int) error
+	//}
+	//
+	//setDSCP interface {
+	//	SetDSCP(int) error
+	//}
 )
 
 // newUDPSession create a new udp session for client or server
@@ -293,7 +293,8 @@ func (s *UDPSession) WriteBuffers(v [][]byte) (n int, err error) {
 			}
 
 			waitsnd = s.kcp.WaitSnd()
-			if waitsnd >= int(s.kcp.snd_wnd) || waitsnd >= int(s.kcp.rmt_wnd) || !s.writeDelay {
+			//if waitsnd >= int(s.kcp.snd_wnd) || waitsnd >= int(s.kcp.rmt_wnd) || !s.writeDelay {
+			if waitsnd >= int(s.kcp.snd_wnd) || waitsnd >= int(s.kcp.rmt_wnd) {
 				//s.kcp.flush(false)
 				s.kcp.flush()
 				s.uncork()
@@ -417,19 +418,19 @@ func (s *UDPSession) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// SetWriteDelay delays write for bulk transfer until the next update interval
-func (s *UDPSession) SetWriteDelay(delay bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.writeDelay = delay
-}
+//// SetWriteDelay delays write for bulk transfer until the next update interval
+//func (s *UDPSession) SetWriteDelay(delay bool) {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	s.writeDelay = delay
+//}
 
-// SetWindowSize set maximum window size
-func (s *UDPSession) SetWindowSize(sndwnd, rcvwnd int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.kcp.WndSize(sndwnd, rcvwnd)
-}
+//// SetWindowSize set maximum window size
+//func (s *UDPSession) SetWindowSize(sndwnd, rcvwnd int) {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	s.kcp.WndSize(sndwnd, rcvwnd)
+//}
 
 //// SetMtu sets the maximum transmission unit(not including UDP header)
 //func (s *UDPSession) SetMtu(mtu int) bool {
@@ -443,16 +444,16 @@ func (s *UDPSession) SetWindowSize(sndwnd, rcvwnd int) {
 //	return true
 //}
 
-// SetStreamMode toggles the stream mode on/off
-func (s *UDPSession) SetStreamMode(enable bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if enable {
-		s.kcp.stream = 1
-	} else {
-		s.kcp.stream = 0
-	}
-}
+//// SetStreamMode toggles the stream mode on/off
+//func (s *UDPSession) SetStreamMode(enable bool) {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	if enable {
+//		s.kcp.stream = 1
+//	} else {
+//		s.kcp.stream = 0
+//	}
+//}
 
 //// SetACKNoDelay changes ack flush option, set true to flush ack immediately,
 //func (s *UDPSession) SetACKNoDelay(nodelay bool) {
@@ -461,14 +462,14 @@ func (s *UDPSession) SetStreamMode(enable bool) {
 //	s.ackNoDelay = nodelay
 //}
 
-// (deprecated)
-//
-// SetDUP duplicates udp packets for kcp output.
-func (s *UDPSession) SetDUP(dup int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.dup = dup
-}
+//// (deprecated)
+////
+//// SetDUP duplicates udp packets for kcp output.
+//func (s *UDPSession) SetDUP(dup int) {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	s.dup = dup
+//}
 
 //// SetNoDelay calls nodelay() of kcp
 //// https://github.com/skywind3000/kcp/blob/master/README.en.md#protocol-configuration
