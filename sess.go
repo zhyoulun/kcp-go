@@ -18,7 +18,6 @@ import (
 
 	"github.com/pkg/errors"
 	"golang.org/x/net/ipv4"
-	"golang.org/x/net/ipv6"
 )
 
 const (
@@ -101,7 +100,7 @@ type (
 		//nonce Entropy
 
 		// packets waiting to be sent on wire
-		txqueue         []ipv4.Message
+		txqueue []ipv4.Message
 		//xconn           batchConn // for x/net
 		xconnWriteError error
 
@@ -474,63 +473,63 @@ func (s *UDPSession) SetNoDelay(nodelay, interval, resend, nc int) {
 	s.kcp.NoDelay(nodelay, interval, resend, nc)
 }
 
-// SetDSCP sets the 6bit DSCP field in IPv4 header, or 8bit Traffic Class in IPv6 header.
+//// SetDSCP sets the 6bit DSCP field in IPv4 header, or 8bit Traffic Class in IPv6 header.
+////
+//// if the underlying connection has implemented `func SetDSCP(int) error`, SetDSCP() will invoke
+//// this function instead.
+////
+//// It has no effect if it's accepted from Listener.
+//func (s *UDPSession) SetDSCP(dscp int) error {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	if s.l != nil {
+//		return errInvalidOperation
+//	}
 //
-// if the underlying connection has implemented `func SetDSCP(int) error`, SetDSCP() will invoke
-// this function instead.
+//	// interface enabled
+//	if ts, ok := s.conn.(setDSCP); ok {
+//		return ts.SetDSCP(dscp)
+//	}
 //
-// It has no effect if it's accepted from Listener.
-func (s *UDPSession) SetDSCP(dscp int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.l != nil {
-		return errInvalidOperation
-	}
+//	if nc, ok := s.conn.(net.Conn); ok {
+//		var succeed bool
+//		if err := ipv4.NewConn(nc).SetTOS(dscp << 2); err == nil {
+//			succeed = true
+//		}
+//		if err := ipv6.NewConn(nc).SetTrafficClass(dscp); err == nil {
+//			succeed = true
+//		}
+//
+//		if succeed {
+//			return nil
+//		}
+//	}
+//	return errInvalidOperation
+//}
 
-	// interface enabled
-	if ts, ok := s.conn.(setDSCP); ok {
-		return ts.SetDSCP(dscp)
-	}
-
-	if nc, ok := s.conn.(net.Conn); ok {
-		var succeed bool
-		if err := ipv4.NewConn(nc).SetTOS(dscp << 2); err == nil {
-			succeed = true
-		}
-		if err := ipv6.NewConn(nc).SetTrafficClass(dscp); err == nil {
-			succeed = true
-		}
-
-		if succeed {
-			return nil
-		}
-	}
-	return errInvalidOperation
-}
-
-// SetReadBuffer sets the socket read buffer, no effect if it's accepted from Listener
-func (s *UDPSession) SetReadBuffer(bytes int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.l == nil {
-		if nc, ok := s.conn.(setReadBuffer); ok {
-			return nc.SetReadBuffer(bytes)
-		}
-	}
-	return errInvalidOperation
-}
-
-// SetWriteBuffer sets the socket write buffer, no effect if it's accepted from Listener
-func (s *UDPSession) SetWriteBuffer(bytes int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.l == nil {
-		if nc, ok := s.conn.(setWriteBuffer); ok {
-			return nc.SetWriteBuffer(bytes)
-		}
-	}
-	return errInvalidOperation
-}
+//// SetReadBuffer sets the socket read buffer, no effect if it's accepted from Listener
+//func (s *UDPSession) SetReadBuffer(bytes int) error {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	if s.l == nil {
+//		if nc, ok := s.conn.(setReadBuffer); ok {
+//			return nc.SetReadBuffer(bytes)
+//		}
+//	}
+//	return errInvalidOperation
+//}
+//
+//// SetWriteBuffer sets the socket write buffer, no effect if it's accepted from Listener
+//func (s *UDPSession) SetWriteBuffer(bytes int) error {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	if s.l == nil {
+//		if nc, ok := s.conn.(setWriteBuffer); ok {
+//			return nc.SetWriteBuffer(bytes)
+//		}
+//	}
+//	return errInvalidOperation
+//}
 
 // post-processing for sending a packet from kcp core
 // steps:
@@ -869,47 +868,47 @@ func (l *Listener) notifyReadError(err error) {
 	})
 }
 
-// SetReadBuffer sets the socket read buffer for the Listener
-func (l *Listener) SetReadBuffer(bytes int) error {
-	if nc, ok := l.conn.(setReadBuffer); ok {
-		return nc.SetReadBuffer(bytes)
-	}
-	return errInvalidOperation
-}
-
-// SetWriteBuffer sets the socket write buffer for the Listener
-func (l *Listener) SetWriteBuffer(bytes int) error {
-	if nc, ok := l.conn.(setWriteBuffer); ok {
-		return nc.SetWriteBuffer(bytes)
-	}
-	return errInvalidOperation
-}
-
-// SetDSCP sets the 6bit DSCP field in IPv4 header, or 8bit Traffic Class in IPv6 header.
+//// SetReadBuffer sets the socket read buffer for the Listener
+//func (l *Listener) SetReadBuffer(bytes int) error {
+//	if nc, ok := l.conn.(setReadBuffer); ok {
+//		return nc.SetReadBuffer(bytes)
+//	}
+//	return errInvalidOperation
+//}
 //
-// if the underlying connection has implemented `func SetDSCP(int) error`, SetDSCP() will invoke
-// this function instead.
-func (l *Listener) SetDSCP(dscp int) error {
-	// interface enabled
-	if ts, ok := l.conn.(setDSCP); ok {
-		return ts.SetDSCP(dscp)
-	}
+//// SetWriteBuffer sets the socket write buffer for the Listener
+//func (l *Listener) SetWriteBuffer(bytes int) error {
+//	if nc, ok := l.conn.(setWriteBuffer); ok {
+//		return nc.SetWriteBuffer(bytes)
+//	}
+//	return errInvalidOperation
+//}
 
-	if nc, ok := l.conn.(net.Conn); ok {
-		var succeed bool
-		if err := ipv4.NewConn(nc).SetTOS(dscp << 2); err == nil {
-			succeed = true
-		}
-		if err := ipv6.NewConn(nc).SetTrafficClass(dscp); err == nil {
-			succeed = true
-		}
-
-		if succeed {
-			return nil
-		}
-	}
-	return errInvalidOperation
-}
+//// SetDSCP sets the 6bit DSCP field in IPv4 header, or 8bit Traffic Class in IPv6 header.
+////
+//// if the underlying connection has implemented `func SetDSCP(int) error`, SetDSCP() will invoke
+//// this function instead.
+//func (l *Listener) SetDSCP(dscp int) error {
+//	// interface enabled
+//	if ts, ok := l.conn.(setDSCP); ok {
+//		return ts.SetDSCP(dscp)
+//	}
+//
+//	if nc, ok := l.conn.(net.Conn); ok {
+//		var succeed bool
+//		if err := ipv4.NewConn(nc).SetTOS(dscp << 2); err == nil {
+//			succeed = true
+//		}
+//		if err := ipv6.NewConn(nc).SetTrafficClass(dscp); err == nil {
+//			succeed = true
+//		}
+//
+//		if succeed {
+//			return nil
+//		}
+//	}
+//	return errInvalidOperation
+//}
 
 // Accept implements the Accept method in the Listener interface; it waits for the next call and returns a generic Conn.
 func (l *Listener) Accept() (net.Conn, error) {
@@ -935,21 +934,21 @@ func (l *Listener) AcceptKCP() (*UDPSession, error) {
 	}
 }
 
-// SetDeadline sets the deadline associated with the listener. A zero time value disables the deadline.
-func (l *Listener) SetDeadline(t time.Time) error {
-	l.SetReadDeadline(t)
-	l.SetWriteDeadline(t)
-	return nil
-}
-
-// SetReadDeadline implements the Conn SetReadDeadline method.
-func (l *Listener) SetReadDeadline(t time.Time) error {
-	l.rd.Store(t)
-	return nil
-}
-
-// SetWriteDeadline implements the Conn SetWriteDeadline method.
-func (l *Listener) SetWriteDeadline(t time.Time) error { return errInvalidOperation }
+//// SetDeadline sets the deadline associated with the listener. A zero time value disables the deadline.
+//func (l *Listener) SetDeadline(t time.Time) error {
+//	l.SetReadDeadline(t)
+//	l.SetWriteDeadline(t)
+//	return nil
+//}
+//
+//// SetReadDeadline implements the Conn SetReadDeadline method.
+//func (l *Listener) SetReadDeadline(t time.Time) error {
+//	l.rd.Store(t)
+//	return nil
+//}
+//
+//// SetWriteDeadline implements the Conn SetWriteDeadline method.
+//func (l *Listener) SetWriteDeadline(t time.Time) error { return errInvalidOperation }
 
 // Close stops listening on the UDP address, and closes the socket
 func (l *Listener) Close() error {
@@ -999,7 +998,11 @@ func ListenWithOptions(laddr string) (*Listener, error) {
 	}
 	//UDPConn is the implementation of the 'Conn' and 'PacketConn' interfaces
 	// - Conn is a generic stream-oriented network connection.
-	// - PacketConn is a generic packet-oriented network connection.
+	// - PacketConn is a generic packet-oriented network connection. PacketConn是一个面向packet的网络连接
+
+	// PacketConn是一个接口类型，与Conn的区别在于，Conn是基于流式的网络连接接口，而PacketConn是基于网络包的网络连接接口。
+	// 由于其基于网络包的特性，所以实现该接口的类型有IPConn和UDPConn类型，即是网络层的连接类型。
+	//PacketConn的与Conn的实现函数的区别在，前者实现的是ReadFrom和WriteTo函数，而后者实现的是Read和Write函数。
 	conn, err := net.ListenUDP("udp", udpaddr)
 	if err != nil {
 		return nil, errors.WithStack(err)

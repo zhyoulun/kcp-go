@@ -26,6 +26,7 @@ func (s *UDPSession) defaultReadLoop() {
 	}
 }
 
+// 从PacketConn中持续读取数据包，数据包最大mtuLimit=1500
 func (l *Listener) defaultMonitor() {
 	buf := make([]byte, mtuLimit)
 	for {
