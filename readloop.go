@@ -1,8 +1,6 @@
 package kcp
 
 import (
-	"sync/atomic"
-
 	"github.com/pkg/errors"
 )
 
@@ -15,7 +13,7 @@ func (s *UDPSession) defaultReadLoop() {
 			if src == "" { // set source address
 				src = addr.String()
 			} else if addr.String() != src {
-				atomic.AddUint64(&DefaultSnmp.InErrs, 1)
+				//atomic.AddUint64(&DefaultSnmp.InErrs, 1)
 				continue
 			}
 			s.packetInput(buf[:n])

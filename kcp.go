@@ -2,7 +2,6 @@ package kcp
 
 import (
 	"encoding/binary"
-	"sync/atomic"
 	"time"
 )
 
@@ -127,13 +126,13 @@ func (seg *segment) encode(ptr []byte) []byte {
 	ptr = ikcp_encode32u(ptr, seg.sn)
 	ptr = ikcp_encode32u(ptr, seg.una)
 	ptr = ikcp_encode32u(ptr, uint32(len(seg.data)))
-	atomic.AddUint64(&DefaultSnmp.OutSegs, 1)
+	//atomic.AddUint64(&DefaultSnmp.OutSegs, 1)
 	return ptr
 }
 
 // KCP defines a single KCP connection
 type KCP struct {
-	conv  uint32
+	conv  uint32//conversation 会话
 	mtu   uint32//默认值IKCP_MTU_DEF（1400），需要函数SetMtu设置，最大传输单元（英语：Maximum Transmission Unit，缩写MTU）
 	mss   uint32//默认值kcp.mtu - IKCP_OVERHEAD（24），最大分段大小（Maximum Segment Size）
 	state uint32
@@ -562,7 +561,9 @@ func (kcp *KCP) parse_data(newseg segment) bool {
 // codecs.
 //
 // 'ackNoDelay' will trigger immediate ACK, but surely it will not be efficient in bandwidth
-func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
+//func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
+
+func (kcp *KCP) Input(data []byte, regular bool) int {
 	snd_una := kcp.snd_una
 	if len(data) < IKCP_OVERHEAD {
 		return -1
@@ -635,7 +636,7 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 				}
 			}
 			if regular && repeat {
-				atomic.AddUint64(&DefaultSnmp.RepeatSegs, 1)
+				//atomic.AddUint64(&DefaultSnmp.RepeatSegs, 1)
 			}
 		} else if cmd == IKCP_CMD_WASK {//对端在问本端的窗口大小
 			// ready to send back IKCP_CMD_WINS in Ikcp_flush
@@ -650,7 +651,7 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 		inSegs++
 		data = data[length:]
 	}
-	atomic.AddUint64(&DefaultSnmp.InSegs, inSegs)
+	//atomic.AddUint64(&DefaultSnmp.InSegs, inSegs)
 
 	// update rtt with the latest ts
 	// ignore the FEC packet
@@ -693,8 +694,8 @@ func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 
 	if windowSlides { // if window has slided, flush
 		kcp.flush(false)
-	} else if ackNoDelay && len(kcp.acklist) > 0 { // ack immediately
-		kcp.flush(true)
+	//} else if ackNoDelay && len(kcp.acklist) > 0 { // ack immediately
+		//	kcp.flush(true)
 	}
 	return 0
 }
@@ -889,22 +890,22 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 	// flash remain segments
 	flushBuffer()
 
-	// counter updates
-	sum := lostSegs
-	if lostSegs > 0 {
-		atomic.AddUint64(&DefaultSnmp.LostSegs, lostSegs)
-	}
-	if fastRetransSegs > 0 {
-		atomic.AddUint64(&DefaultSnmp.FastRetransSegs, fastRetransSegs)
-		sum += fastRetransSegs
-	}
-	if earlyRetransSegs > 0 {
-		atomic.AddUint64(&DefaultSnmp.EarlyRetransSegs, earlyRetransSegs)
-		sum += earlyRetransSegs
-	}
-	if sum > 0 {
-		atomic.AddUint64(&DefaultSnmp.RetransSegs, sum)
-	}
+	//// counter updates
+	//sum := lostSegs
+	//if lostSegs > 0 {
+	//	atomic.AddUint64(&DefaultSnmp.LostSegs, lostSegs)
+	//}
+	//if fastRetransSegs > 0 {
+	//	atomic.AddUint64(&DefaultSnmp.FastRetransSegs, fastRetransSegs)
+	//	sum += fastRetransSegs
+	//}
+	//if earlyRetransSegs > 0 {
+	//	atomic.AddUint64(&DefaultSnmp.EarlyRetransSegs, earlyRetransSegs)
+	//	sum += earlyRetransSegs
+	//}
+	//if sum > 0 {
+	//	atomic.AddUint64(&DefaultSnmp.RetransSegs, sum)
+	//}
 
 	// cwnd update
 	if kcp.nocwnd == 0 {
