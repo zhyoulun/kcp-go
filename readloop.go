@@ -4,6 +4,15 @@ import (
 	"github.com/pkg/errors"
 )
 
+//client read loop
+func (s *UDPSession) readLoop() {
+	s.defaultReadLoop()
+}
+
+func (l *Listener) monitor() {
+	l.defaultMonitor()
+}
+
 func (s *UDPSession) defaultReadLoop() {
 	buf := make([]byte, mtuLimit)
 	var src string
@@ -12,7 +21,7 @@ func (s *UDPSession) defaultReadLoop() {
 			// make sure the packet is from the same source
 			if src == "" { // set source address
 				src = addr.String()
-			} else if addr.String() != src {
+			} else if addr.String() != src { //?什么场景会出现多个包之间的addr不一致
 				//atomic.AddUint64(&DefaultSnmp.InErrs, 1)
 				continue
 			}

@@ -293,7 +293,8 @@ func (s *UDPSession) WriteBuffers(v [][]byte) (n int, err error) {
 
 			waitsnd = s.kcp.WaitSnd()
 			if waitsnd >= int(s.kcp.snd_wnd) || waitsnd >= int(s.kcp.rmt_wnd) || !s.writeDelay {
-				s.kcp.flush(false)
+				//s.kcp.flush(false)
+				s.kcp.flush()
 				s.uncork()
 			}
 			s.mu.Unlock()
@@ -355,7 +356,8 @@ func (s *UDPSession) Close() error {
 
 		// try best to send all queued messages
 		s.mu.Lock()
-		s.kcp.flush(false)
+		//s.kcp.flush(false)
+		s.kcp.flush()
 		s.uncork()
 		// release pending segments
 		s.kcp.ReleaseTX()
@@ -427,17 +429,17 @@ func (s *UDPSession) SetWindowSize(sndwnd, rcvwnd int) {
 	s.kcp.WndSize(sndwnd, rcvwnd)
 }
 
-// SetMtu sets the maximum transmission unit(not including UDP header)
-func (s *UDPSession) SetMtu(mtu int) bool {
-	if mtu > mtuLimit {
-		return false
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.kcp.SetMtu(mtu)
-	return true
-}
+//// SetMtu sets the maximum transmission unit(not including UDP header)
+//func (s *UDPSession) SetMtu(mtu int) bool {
+//	if mtu > mtuLimit {
+//		return false
+//	}
+//
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	s.kcp.SetMtu(mtu)
+//	return true
+//}
 
 // SetStreamMode toggles the stream mode on/off
 func (s *UDPSession) SetStreamMode(enable bool) {
@@ -466,13 +468,13 @@ func (s *UDPSession) SetDUP(dup int) {
 	s.dup = dup
 }
 
-// SetNoDelay calls nodelay() of kcp
-// https://github.com/skywind3000/kcp/blob/master/README.en.md#protocol-configuration
-func (s *UDPSession) SetNoDelay(nodelay, interval, resend, nc int) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.kcp.NoDelay(nodelay, interval, resend, nc)
-}
+//// SetNoDelay calls nodelay() of kcp
+//// https://github.com/skywind3000/kcp/blob/master/README.en.md#protocol-configuration
+//func (s *UDPSession) SetNoDelay(nodelay, interval, resend, nc int) {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	s.kcp.NoDelay(nodelay, interval, resend, nc)
+//}
 
 //// SetDSCP sets the 6bit DSCP field in IPv4 header, or 8bit Traffic Class in IPv6 header.
 ////
@@ -586,7 +588,8 @@ func (s *UDPSession) update() {
 	case <-s.die:
 	default:
 		s.mu.Lock()
-		interval := s.kcp.flush(false)
+		//interval := s.kcp.flush(false)
+		interval := s.kcp.flush()
 		waitsnd := s.kcp.WaitSnd()
 		if waitsnd < int(s.kcp.snd_wnd) && waitsnd < int(s.kcp.rmt_wnd) {
 			s.notifyWriteEvent()
@@ -652,7 +655,7 @@ func (s *UDPSession) notifyWriteError(err error) {
 
 // packet input stage
 func (s *UDPSession) packetInput(data []byte) {
-	decrypted := false
+	//decrypted := false
 	//if s.block != nil && len(data) >= cryptHeaderSize {
 	//	s.block.Decrypt(data, data)
 	//	data = data[nonceSize:]
@@ -666,9 +669,10 @@ func (s *UDPSession) packetInput(data []byte) {
 	//} else if s.block == nil {
 	//	decrypted = true
 	//}
-	decrypted = true
+	//decrypted = true
 
-	if decrypted && len(data) >= IKCP_OVERHEAD {
+	//if decrypted && len(data) >= IKCP_OVERHEAD {
+	if len(data) >= IKCP_OVERHEAD {
 		s.kcpInput(data)
 	}
 }
@@ -735,7 +739,7 @@ func (s *UDPSession) kcpInput(data []byte) {
 	//} else {
 	s.mu.Lock()
 	//if ret := s.kcp.Input(data, true, s.ackNoDelay); ret != 0 {
-	if ret := s.kcp.Input(data, true); ret != 0 {
+	if ret := s.kcp.Input(data); ret != 0 {
 		//kcpInErrors++
 	}
 	if n := s.kcp.PeekSize(); n > 0 {

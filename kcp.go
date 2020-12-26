@@ -31,9 +31,11 @@ const (
 )
 
 // monotonic reference time point
-var refTime time.Time = time.Now()
+var refTime = time.Now()
 
 // currentMs returns current elapsed monotonic milliseconds since program startup
+// 程序启动后，距离当前的毫秒数
+// uint32, 0到4,294,967,295，   4294967/3600/24=49天一个轮回
 func currentMs() uint32 { return uint32(time.Since(refTime) / time.Millisecond) }
 
 // output_callback is a prototype which ought capture conn and call conn.Write
@@ -132,9 +134,9 @@ func (seg *segment) encode(ptr []byte) []byte {
 
 // KCP defines a single KCP connection
 type KCP struct {
-	conv  uint32//conversation 会话
-	mtu   uint32//默认值IKCP_MTU_DEF（1400），需要函数SetMtu设置，最大传输单元（英语：Maximum Transmission Unit，缩写MTU）
-	mss   uint32//默认值kcp.mtu - IKCP_OVERHEAD（24），最大分段大小（Maximum Segment Size）
+	conv  uint32 //conversation 会话
+	mtu   uint32 //默认值IKCP_MTU_DEF（1400），需要函数SetMtu设置，最大传输单元（英语：Maximum Transmission Unit，缩写MTU）
+	mss   uint32 //默认值kcp.mtu - IKCP_OVERHEAD（24），最大分段大小（Maximum Segment Size）
 	state uint32
 
 	snd_una uint32 //The sender of data keeps track of the oldest unacknowledged sequence number in the variable SND.UNA.
@@ -168,8 +170,8 @@ type KCP struct {
 	incr      uint32
 
 	fastresend int32
-	nocwnd     int32
-	stream     int32
+	//nocwnd     int32
+	stream int32
 
 	snd_queue []segment
 	rcv_queue []segment
@@ -178,7 +180,7 @@ type KCP struct {
 
 	acklist []ackItem
 
-	buffer   []byte//初始空间mtu，make([]byte, kcp.mtu)
+	buffer   []byte //初始空间mtu，make([]byte, kcp.mtu)
 	reserved int
 	output   output_callback
 }
@@ -451,6 +453,7 @@ func (kcp *KCP) parse_ack(sn uint32) {
 			kcp.delSegment(seg)
 			break
 		}
+		//snd_buf中的seg的sn都是有序的，如果sn比当前的seg.sn小，就不用再往后看了，肯定都是比seg.sn小的
 		//sn<seg.sn
 		if _itimediff(sn, seg.sn) < 0 {
 			break
@@ -467,8 +470,10 @@ func (kcp *KCP) parse_fastack(sn, ts uint32) {
 
 	for k := range kcp.snd_buf {
 		seg := &kcp.snd_buf[k]
+		// sn<seg.sn
 		if _itimediff(sn, seg.sn) < 0 {
 			break
+			//sn>seg.sn && seg.ts<=ts; ts是什么意思？
 		} else if sn != seg.sn && _itimediff(seg.ts, ts) <= 0 {
 			seg.fastack++
 		}
@@ -563,14 +568,14 @@ func (kcp *KCP) parse_data(newseg segment) bool {
 // 'ackNoDelay' will trigger immediate ACK, but surely it will not be efficient in bandwidth
 //func (kcp *KCP) Input(data []byte, regular, ackNoDelay bool) int {
 
-func (kcp *KCP) Input(data []byte, regular bool) int {
+func (kcp *KCP) Input(data []byte) int {
 	snd_una := kcp.snd_una
-	if len(data) < IKCP_OVERHEAD {
+	if len(data) < IKCP_OVERHEAD { //长度小于24B，放弃decode
 		return -1
 	}
 
 	var latest uint32 // the latest ack packet
-	var flag int
+	var flag int      //标识是否收到了ack包
 	var inSegs uint64
 	var windowSlides bool
 
@@ -579,15 +584,16 @@ func (kcp *KCP) Input(data []byte, regular bool) int {
 		var wnd uint16
 		var cmd, frg uint8
 
-		if len(data) < IKCP_OVERHEAD {
+		if len(data) < IKCP_OVERHEAD { //长度小于24B，放弃decode
 			break
 		}
 
 		data = ikcp_decode32u(data, &conv)
+		//从精简版流程来看，如果是server端，这个判断一定是true
+		//如果是client端，不一定
 		if conv != kcp.conv {
 			return -1
 		}
-
 		data = ikcp_decode8u(data, &cmd)
 		data = ikcp_decode8u(data, &frg)
 		data = ikcp_decode16u(data, &wnd)
@@ -605,21 +611,21 @@ func (kcp *KCP) Input(data []byte, regular bool) int {
 		}
 
 		// only trust window updates from regular packets. i.e: latest update
-		if regular {
-			kcp.rmt_wnd = uint32(wnd)
-		}
+		//if regular {
+		kcp.rmt_wnd = uint32(wnd) //从对端接收到的wnd信息
+		//}
 		if kcp.parse_una(una) > 0 {
 			windowSlides = true
 		}
 		kcp.shrink_buf()
 
-		if cmd == IKCP_CMD_ACK {//对端发过来的ack包
+		if cmd == IKCP_CMD_ACK { //对端发过来的ack包
 			kcp.parse_ack(sn)
 			kcp.parse_fastack(sn, ts)
-			flag |= 1
+			flag |= 1 //标识是否收到了ack包
 			latest = ts
-		} else if cmd == IKCP_CMD_PUSH {//对端发过来的数据包
-			repeat := true
+		} else if cmd == IKCP_CMD_PUSH { //对端发过来的数据包
+			//repeat := true
 			if _itimediff(sn, kcp.rcv_nxt+kcp.rcv_wnd) < 0 {
 				kcp.ack_push(sn, ts)
 				if _itimediff(sn, kcp.rcv_nxt) >= 0 {
@@ -632,13 +638,14 @@ func (kcp *KCP) Input(data []byte, regular bool) int {
 					seg.sn = sn
 					seg.una = una
 					seg.data = data[:length] // delayed data copying
-					repeat = kcp.parse_data(seg)
+					//repeat = kcp.parse_data(seg)
+					kcp.parse_data(seg)
 				}
 			}
-			if regular && repeat {
-				//atomic.AddUint64(&DefaultSnmp.RepeatSegs, 1)
-			}
-		} else if cmd == IKCP_CMD_WASK {//对端在问本端的窗口大小
+			//if regular && repeat {
+			//	atomic.AddUint64(&DefaultSnmp.RepeatSegs, 1)
+			//}
+		} else if cmd == IKCP_CMD_WASK { //对端在问本端的窗口大小
 			// ready to send back IKCP_CMD_WINS in Ikcp_flush
 			// tell remote my window size
 			kcp.probe |= IKCP_ASK_TELL
@@ -655,46 +662,49 @@ func (kcp *KCP) Input(data []byte, regular bool) int {
 
 	// update rtt with the latest ts
 	// ignore the FEC packet
-	if flag != 0 && regular {
+	//if flag != 0 && regular {
+	if flag != 0 {
 		current := currentMs()
+		//current >= latest
 		if _itimediff(current, latest) >= 0 {
 			kcp.update_ack(_itimediff(current, latest))
 		}
 	}
 
-	// cwnd update when packet arrived
-	if kcp.nocwnd == 0 {
-		//新的snd_una比旧的snd_una大，说明收到合法的数据包了
-		if _itimediff(kcp.snd_una, snd_una) > 0 {
-			if kcp.cwnd < kcp.rmt_wnd {
-				mss := kcp.mss
-				if kcp.cwnd < kcp.ssthresh {
-					kcp.cwnd++
-					kcp.incr += mss
-				} else {
-					if kcp.incr < mss {
-						kcp.incr = mss
-					}
-					kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
-					if (kcp.cwnd+1)*mss <= kcp.incr {
-						if mss > 0 {
-							kcp.cwnd = (kcp.incr + mss - 1) / mss
-						} else {
-							kcp.cwnd = kcp.incr + mss - 1
-						}
+	//// cwnd update when packet arrived
+	//if kcp.nocwnd == 0 {
+	//新的snd_una比旧的snd_una大，说明收到合法的数据包了
+	if _itimediff(kcp.snd_una, snd_una) > 0 {
+		if kcp.cwnd < kcp.rmt_wnd {
+			mss := kcp.mss
+			if kcp.cwnd < kcp.ssthresh {
+				kcp.cwnd++
+				kcp.incr += mss
+			} else {
+				if kcp.incr < mss {
+					kcp.incr = mss
+				}
+				kcp.incr += (mss*mss)/kcp.incr + (mss / 16)
+				if (kcp.cwnd+1)*mss <= kcp.incr {
+					if mss > 0 {
+						kcp.cwnd = (kcp.incr + mss - 1) / mss
+					} else {
+						kcp.cwnd = kcp.incr + mss - 1
 					}
 				}
-				if kcp.cwnd > kcp.rmt_wnd {
-					kcp.cwnd = kcp.rmt_wnd
-					kcp.incr = kcp.rmt_wnd * mss
-				}
+			}
+			if kcp.cwnd > kcp.rmt_wnd {
+				kcp.cwnd = kcp.rmt_wnd
+				kcp.incr = kcp.rmt_wnd * mss
 			}
 		}
 	}
+	//}
 
 	if windowSlides { // if window has slided, flush
-		kcp.flush(false)
-	//} else if ackNoDelay && len(kcp.acklist) > 0 { // ack immediately
+		//kcp.flush(false)
+		kcp.flush()
+		//} else if ackNoDelay && len(kcp.acklist) > 0 { // ack immediately
 		//	kcp.flush(true)
 	}
 	return 0
@@ -708,7 +718,7 @@ func (kcp *KCP) wnd_unused() uint16 {
 }
 
 // flush pending data
-func (kcp *KCP) flush(ackOnly bool) uint32 {
+func (kcp *KCP) flush() uint32 {
 	var seg segment
 	seg.conv = kcp.conv
 	seg.cmd = IKCP_CMD_ACK
@@ -746,10 +756,10 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 	}
 	kcp.acklist = kcp.acklist[0:0]
 
-	if ackOnly { // flash remain ack segments
-		flushBuffer()
-		return kcp.interval
-	}
+	//if ackOnly { // flash remain ack segments
+	//	flushBuffer()
+	//	return kcp.interval
+	//}
 
 	// probe window size (if remote window size equals zero)
 	if kcp.rmt_wnd == 0 {
@@ -793,9 +803,9 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 
 	// calculate window size
 	cwnd := _imin_(kcp.snd_wnd, kcp.rmt_wnd)
-	if kcp.nocwnd == 0 {
-		cwnd = _imin_(kcp.cwnd, cwnd)
-	}
+	//if kcp.nocwnd == 0 {
+	cwnd = _imin_(kcp.cwnd, cwnd)
+	//}
 
 	// sliding window, controlled by snd_nxt && sna_una+cwnd
 	newSegsCount := 0
@@ -908,34 +918,34 @@ func (kcp *KCP) flush(ackOnly bool) uint32 {
 	//}
 
 	// cwnd update
-	if kcp.nocwnd == 0 {
-		// update ssthresh
-		// rate halving, https://tools.ietf.org/html/rfc6937
-		if change > 0 {
-			inflight := kcp.snd_nxt - kcp.snd_una
-			kcp.ssthresh = inflight / 2
-			if kcp.ssthresh < IKCP_THRESH_MIN {
-				kcp.ssthresh = IKCP_THRESH_MIN
-			}
-			kcp.cwnd = kcp.ssthresh + resent
-			kcp.incr = kcp.cwnd * kcp.mss
+	//if kcp.nocwnd == 0 {
+	// update ssthresh
+	// rate halving, https://tools.ietf.org/html/rfc6937
+	if change > 0 {
+		inflight := kcp.snd_nxt - kcp.snd_una
+		kcp.ssthresh = inflight / 2
+		if kcp.ssthresh < IKCP_THRESH_MIN {
+			kcp.ssthresh = IKCP_THRESH_MIN
 		}
-
-		// congestion control, https://tools.ietf.org/html/rfc5681
-		if lostSegs > 0 {
-			kcp.ssthresh = cwnd / 2
-			if kcp.ssthresh < IKCP_THRESH_MIN {
-				kcp.ssthresh = IKCP_THRESH_MIN
-			}
-			kcp.cwnd = 1
-			kcp.incr = kcp.mss
-		}
-
-		if kcp.cwnd < 1 {
-			kcp.cwnd = 1
-			kcp.incr = kcp.mss
-		}
+		kcp.cwnd = kcp.ssthresh + resent
+		kcp.incr = kcp.cwnd * kcp.mss
 	}
+
+	// congestion control, https://tools.ietf.org/html/rfc5681
+	if lostSegs > 0 {
+		kcp.ssthresh = cwnd / 2
+		if kcp.ssthresh < IKCP_THRESH_MIN {
+			kcp.ssthresh = IKCP_THRESH_MIN
+		}
+		kcp.cwnd = 1
+		kcp.incr = kcp.mss
+	}
+
+	if kcp.cwnd < 1 {
+		kcp.cwnd = 1
+		kcp.incr = kcp.mss
+	}
+	//}
 
 	return uint32(minrto)
 }
@@ -966,7 +976,8 @@ func (kcp *KCP) Update() {
 		if _itimediff(current, kcp.ts_flush) >= 0 {
 			kcp.ts_flush = current + kcp.interval
 		}
-		kcp.flush(false)
+		//kcp.flush(false)
+		kcp.flush()
 	}
 }
 
@@ -1041,38 +1052,38 @@ func (kcp *KCP) SetMtu(mtu int) int {
 	return 0
 }
 
-// NoDelay options
-// fastest: ikcp_nodelay(kcp, 1, 20, 2, 1)
-// nodelay: 0:disable(default), 1:enable
-// interval: internal update timer interval in millisec, default is 100ms
-// resend: 0:disable fast resend(default), 1:enable fast resend
-// nc: 0:normal congestion control(default), 1:disable congestion control
-// 这个函数暂时没有调用者
-func (kcp *KCP) NoDelay(nodelay, interval, resend, nc int) int {
-	if nodelay >= 0 {
-		kcp.nodelay = uint32(nodelay)
-		if nodelay != 0 {
-			kcp.rx_minrto = IKCP_RTO_NODELAY
-		} else {
-			kcp.rx_minrto = IKCP_RTO_MIN
-		}
-	}
-	if interval >= 0 {
-		if interval > 5000 {
-			interval = 5000
-		} else if interval < 10 {
-			interval = 10
-		}
-		kcp.interval = uint32(interval)
-	}
-	if resend >= 0 {
-		kcp.fastresend = int32(resend)
-	}
-	if nc >= 0 {
-		kcp.nocwnd = int32(nc)
-	}
-	return 0
-}
+//// NoDelay options
+//// fastest: ikcp_nodelay(kcp, 1, 20, 2, 1)
+//// nodelay: 0:disable(default), 1:enable
+//// interval: internal update timer interval in millisec, default is 100ms
+//// resend: 0:disable fast resend(default), 1:enable fast resend
+//// nc: 0:normal congestion control(default), 1:disable congestion control
+//// 这个函数暂时没有调用者
+//func (kcp *KCP) NoDelay(nodelay, interval, resend, nc int) int {
+//	if nodelay >= 0 {
+//		kcp.nodelay = uint32(nodelay)
+//		if nodelay != 0 {
+//			kcp.rx_minrto = IKCP_RTO_NODELAY
+//		} else {
+//			kcp.rx_minrto = IKCP_RTO_MIN
+//		}
+//	}
+//	if interval >= 0 {
+//		if interval > 5000 {
+//			interval = 5000
+//		} else if interval < 10 {
+//			interval = 10
+//		}
+//		kcp.interval = uint32(interval)
+//	}
+//	if resend >= 0 {
+//		kcp.fastresend = int32(resend)
+//	}
+//	if nc >= 0 {
+//		kcp.nocwnd = int32(nc)
+//	}
+//	return 0
+//}
 
 // WndSize sets maximum window size: sndwnd=32, rcvwnd=32 by default
 func (kcp *KCP) WndSize(sndwnd, rcvwnd int) int {
