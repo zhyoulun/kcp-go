@@ -278,7 +278,7 @@ func (s *UDPSession) WriteBuffers(v [][]byte) (n int, err error) {
 
 		// make sure write do not overflow the max sliding window on both side
 		waitsnd := s.kcp.WaitSnd()
-		if waitsnd < int(s.kcp.snd_wnd) && waitsnd < int(s.kcp.rmt_wnd) {
+		if waitsnd < int(IKCP_WND_SND) && waitsnd < int(s.kcp.rmt_wnd) {
 			for _, b := range v {
 				n += len(b)
 				for {
@@ -294,7 +294,7 @@ func (s *UDPSession) WriteBuffers(v [][]byte) (n int, err error) {
 
 			waitsnd = s.kcp.WaitSnd()
 			//if waitsnd >= int(s.kcp.snd_wnd) || waitsnd >= int(s.kcp.rmt_wnd) || !s.writeDelay {
-			if waitsnd >= int(s.kcp.snd_wnd) || waitsnd >= int(s.kcp.rmt_wnd) {
+			if waitsnd >= IKCP_WND_SND || waitsnd >= int(s.kcp.rmt_wnd) {
 				//s.kcp.flush(false)
 				s.kcp.flush()
 				s.uncork()
@@ -594,7 +594,7 @@ func (s *UDPSession) update() {
 		//interval := s.kcp.flush(false)
 		interval := s.kcp.flush()
 		waitsnd := s.kcp.WaitSnd()
-		if waitsnd < int(s.kcp.snd_wnd) && waitsnd < int(s.kcp.rmt_wnd) {
+		if waitsnd < IKCP_WND_SND && waitsnd < int(s.kcp.rmt_wnd) {
 			s.notifyWriteEvent()
 		}
 		s.uncork()
@@ -749,7 +749,7 @@ func (s *UDPSession) kcpInput(data []byte) {
 		s.notifyReadEvent()
 	}
 	waitsnd := s.kcp.WaitSnd()
-	if waitsnd < int(s.kcp.snd_wnd) && waitsnd < int(s.kcp.rmt_wnd) {
+	if waitsnd < IKCP_WND_SND && waitsnd < int(s.kcp.rmt_wnd) {
 		s.notifyWriteEvent()
 	}
 	s.uncork()

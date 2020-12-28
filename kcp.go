@@ -139,7 +139,7 @@ type KCP struct {
 	conv uint32 //conversation 会话
 	//mtu   uint32 //默认值IKCP_MTU_DEF（1400），需要函数SetMtu设置，最大传输单元（英语：Maximum Transmission Unit，缩写MTU）
 	//mss   uint32 //默认值kcp.mtu - IKCP_OVERHEAD（24），最大分段大小（Maximum Segment Size）
-	state uint32
+	//state uint32
 
 	snd_una uint32 //The sender of data keeps track of the oldest unacknowledged sequence number in the variable SND.UNA.
 	snd_nxt uint32 //The sender of data keeps track of the next sequence number to use in the variable SND.NXT.
@@ -154,7 +154,7 @@ type KCP struct {
 	rx_rto uint32
 	//rx_minrto uint32
 
-	snd_wnd uint32
+	//snd_wnd uint32
 	rcv_wnd uint32
 	rmt_wnd uint32 //应该是remote_wnd
 	cwnd    uint32 //congesion window，拥塞窗口
@@ -163,18 +163,18 @@ type KCP struct {
 	//interval uint32
 	ts_flush uint32
 
-	nodelay uint32 //是否启用 nodelay模式，0不启用；1启用。   默认值为0
+	//nodelay uint32 //是否启用 nodelay模式，0不启用；1启用。   默认值为0
 	updated uint32
 
 	ts_probe   uint32
 	probe_wait uint32
 
-	dead_link uint32
+	//dead_link uint32
 	incr      uint32
 
-	fastresend int32
+	//fastresend int32
 	//nocwnd     int32
-	stream int32
+	//stream int32
 
 	snd_queue []segment
 	rcv_queue []segment //长度受到rcv_wnd的限制
@@ -183,9 +183,9 @@ type KCP struct {
 
 	acklist []ackItem
 
-	buffer   []byte //初始空间mtu，make([]byte, kcp.mtu)
-	reserved int
-	output   output_callback
+	buffer []byte //初始空间mtu，make([]byte, kcp.mtu)
+	//reserved int
+	output output_callback
 }
 
 type ackItem struct {
@@ -202,7 +202,7 @@ type ackItem struct {
 func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp := new(KCP)
 	kcp.conv = conv
-	kcp.snd_wnd = IKCP_WND_SND
+	//kcp.snd_wnd = IKCP_WND_SND
 	kcp.rcv_wnd = IKCP_WND_RCV
 	kcp.rmt_wnd = IKCP_WND_RCV
 	//kcp.mtu = IKCP_MTU_DEF
@@ -213,7 +213,7 @@ func NewKCP(conv uint32, output output_callback) *KCP {
 	//kcp.interval = IKCP_INTERVAL
 	kcp.ts_flush = IKCP_INTERVAL
 	kcp.ssthresh = IKCP_THRESH_INIT
-	kcp.dead_link = IKCP_DEADLINK
+	//kcp.dead_link = IKCP_DEADLINK
 	kcp.output = output
 	return kcp
 }
@@ -344,30 +344,30 @@ func (kcp *KCP) Send(buffer []byte) int {
 	}
 
 	// append to previous segment in streaming mode (if possible)
-	if kcp.stream != 0 {
-		n := len(kcp.snd_queue)
-		if n > 0 {
-			seg := &kcp.snd_queue[n-1]
-			if len(seg.data) < IKCP_MSS {
-				capacity := IKCP_MSS - len(seg.data)
-				extend := capacity
-				if len(buffer) < capacity {
-					extend = len(buffer)
-				}
-
-				// grow slice, the underlying cap is guaranteed to
-				// be larger than kcp.mss
-				oldlen := len(seg.data)
-				seg.data = seg.data[:oldlen+extend]
-				copy(seg.data[oldlen:], buffer)
-				buffer = buffer[extend:]
-			}
-		}
-
-		if len(buffer) == 0 {
-			return 0
-		}
-	}
+	//if kcp.stream != 0 {
+	//	n := len(kcp.snd_queue)
+	//	if n > 0 {
+	//		seg := &kcp.snd_queue[n-1]
+	//		if len(seg.data) < IKCP_MSS {
+	//			capacity := IKCP_MSS - len(seg.data)
+	//			extend := capacity
+	//			if len(buffer) < capacity {
+	//				extend = len(buffer)
+	//			}
+	//
+	//			// grow slice, the underlying cap is guaranteed to
+	//			// be larger than kcp.mss
+	//			oldlen := len(seg.data)
+	//			seg.data = seg.data[:oldlen+extend]
+	//			copy(seg.data[oldlen:], buffer)
+	//			buffer = buffer[extend:]
+	//		}
+	//	}
+	//
+	//	if len(buffer) == 0 {
+	//		return 0
+	//	}
+	//}
 
 	if len(buffer) <= IKCP_MSS {
 		count = 1
@@ -392,11 +392,12 @@ func (kcp *KCP) Send(buffer []byte) int {
 		}
 		seg := kcp.newSegment(size)
 		copy(seg.data, buffer[:size])
-		if kcp.stream == 0 { // message mode
-			seg.frg = uint8(count - i - 1)
-		} else { // stream mode
-			seg.frg = 0
-		}
+		//if kcp.stream == 0 { // message mode
+		//	seg.frg = uint8(count - i - 1)
+		//} else { // stream mode
+		//	seg.frg = 0
+		//}
+		seg.frg = uint8(count - i - 1)
 		kcp.snd_queue = append(kcp.snd_queue, seg)
 		buffer = buffer[size:]
 	}
@@ -744,21 +745,24 @@ func (kcp *KCP) flush() uint32 {
 	seg.una = kcp.rcv_nxt
 
 	buffer := kcp.buffer
-	ptr := buffer[kcp.reserved:] // keep n bytes untouched
+	//ptr := buffer[kcp.reserved:] // keep n bytes untouched
+	ptr := buffer // keep n bytes untouched
 
 	// makeSpace makes room for writing
 	makeSpace := func(space int) {
 		size := len(buffer) - len(ptr)
 		if size+space > IKCP_MTU_DEF {
 			kcp.output(buffer, size)
-			ptr = buffer[kcp.reserved:]
+			//ptr = buffer[kcp.reserved:]
+			ptr = buffer //写出之后，重新归0
 		}
 	}
 
 	// flush bytes in buffer if there is any
 	flushBuffer := func() {
 		size := len(buffer) - len(ptr)
-		if size > kcp.reserved {
+		//if size > kcp.reserved {
+		if size > 0 {
 			kcp.output(buffer, size)
 		}
 	}
@@ -767,7 +771,7 @@ func (kcp *KCP) flush() uint32 {
 	for i, ack := range kcp.acklist {
 		makeSpace(IKCP_OVERHEAD)
 		// filter jitters caused by bufferbloat
-		if _itimediff(ack.sn, kcp.rcv_nxt) >= 0 || len(kcp.acklist)-1 == i {
+		if _itimediff(ack.sn, kcp.rcv_nxt) >= 0 || len(kcp.acklist)-1 == i { //第二个条件是什么意思
 			seg.sn, seg.ts = ack.sn, ack.ts
 			ptr = seg.encode(ptr)
 		}
@@ -820,7 +824,7 @@ func (kcp *KCP) flush() uint32 {
 	kcp.probe = 0
 
 	// calculate window size
-	cwnd := _imin_(kcp.snd_wnd, kcp.rmt_wnd)
+	cwnd := _imin_(IKCP_WND_SND, kcp.rmt_wnd)
 	//if kcp.nocwnd == 0 {
 	cwnd = _imin_(kcp.cwnd, cwnd)
 	//}
@@ -844,14 +848,15 @@ func (kcp *KCP) flush() uint32 {
 	}
 
 	// calculate resent
-	resent := uint32(kcp.fastresend)
-	if kcp.fastresend <= 0 {
-		resent = 0xffffffff
-	}
+	//resent := uint32(kcp.fastresend)
+	//if kcp.fastresend <= 0 {
+	//	resent = 0xffffffff
+	//}
+	var resent uint32 = 0xffffffff
 
 	// check for retransmissions
 	current := currentMs()
-	var change, lostSegs, fastRetransSegs, earlyRetransSegs uint64
+	var change, lostSegs, earlyRetransSegs uint64
 	minrto := int32(IKCP_INTERVAL)
 
 	ref := kcp.snd_buf[:len(kcp.snd_buf)] // for bounds check elimination
@@ -865,13 +870,13 @@ func (kcp *KCP) flush() uint32 {
 			needsend = true
 			segment.rto = kcp.rx_rto
 			segment.resendts = current + segment.rto
-		} else if segment.fastack >= resent { // fast retransmit
-			needsend = true
-			segment.fastack = 0
-			segment.rto = kcp.rx_rto
-			segment.resendts = current + segment.rto
-			change++
-			fastRetransSegs++
+			//} else if segment.fastack >= resent { // fast retransmit
+			//	needsend = true
+			//	segment.fastack = 0
+			//	segment.rto = kcp.rx_rto
+			//	segment.resendts = current + segment.rto
+			//	change++
+			//	fastRetransSegs++
 		} else if segment.fastack > 0 && newSegsCount == 0 { // early retransmit
 			needsend = true
 			segment.fastack = 0
@@ -881,11 +886,12 @@ func (kcp *KCP) flush() uint32 {
 			earlyRetransSegs++
 		} else if _itimediff(current, segment.resendts) >= 0 { // RTO
 			needsend = true
-			if kcp.nodelay == 0 {
-				segment.rto += kcp.rx_rto
-			} else {
-				segment.rto += kcp.rx_rto / 2
-			}
+			//if kcp.nodelay == 0 {
+			//	segment.rto += kcp.rx_rto
+			//} else {
+			//	segment.rto += kcp.rx_rto / 2
+			//}
+			segment.rto += kcp.rx_rto
 			segment.fastack = 0
 			segment.resendts = current + segment.rto
 			lostSegs++
@@ -904,9 +910,9 @@ func (kcp *KCP) flush() uint32 {
 			copy(ptr, segment.data)
 			ptr = ptr[len(segment.data):]
 
-			if segment.xmit >= kcp.dead_link {
-				kcp.state = 0xFFFFFFFF
-			}
+			//if segment.xmit >= IKCP_DEADLINK {
+			//	kcp.state = 0xFFFFFFFF
+			//}
 		}
 
 		// get the nearest rto
