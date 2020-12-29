@@ -1,7 +1,7 @@
 package main
 
 import (
-	listener2 "github.com/zhyoulun/kcp-go/src/listener"
+	"github.com/zhyoulun/kcp-go/src/listener"
 	"github.com/zhyoulun/kcp-go/src/session"
 	"io"
 	"log"
@@ -12,11 +12,11 @@ func main() {
 	//key := pbkdf2.Key([]byte("demo pass"), []byte("demo salt"), 1024, 32, sha1.New)
 	//block, _ := kcp.NewAESBlockCrypt(key)
 	//if listener, err := kcp.ListenWithOptions("127.0.0.1:12345", block, 10, 3); err == nil {
-	if listener, err := listener2.ListenWithOptions("127.0.0.1:12345"); err == nil {
+	if l, err := listener.ListenWithOptions("127.0.0.1:12345"); err == nil {
 		// spin-up the client
 		go client()
 		for {
-			s, err := listener.AcceptKCP()
+			s, err := l.AcceptKCP()
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -54,24 +54,24 @@ func client() {
 
 	// dial to the echo server
 	//if sess, err := kcp.DialWithOptions("127.0.0.1:12345", block, 10, 3); err == nil {
-	if sess, err := listener2.DialWithOptions("127.0.0.1:12345"); err == nil {
-		for {
-			data := time.Now().String()
-			buf := make([]byte, len(data))
-			log.Println("sent:", data)
-			if _, err := sess.Write([]byte(data)); err == nil {
-				// read back the data
-				if _, err := io.ReadFull(sess, buf); err == nil {
-					log.Println("recv:", string(buf))
-				} else {
-					log.Fatal(err)
-				}
-			} else {
-				log.Fatal(err)
-			}
-			time.Sleep(time.Second)
-		}
-	} else {
+	var sess *session.UDPSession
+	var err error
+	if sess, err = session.DialWithOptions("127.0.0.1:12345"); err != nil {
 		log.Fatal(err)
+	}
+
+	for {
+		data := time.Now().String()
+		buf := make([]byte, len(data))
+		log.Println("sent:", data)
+		if _, err := sess.Write([]byte(data)); err != nil {
+			log.Fatal(err)
+		}
+		// read back the data
+		if _, err := io.ReadFull(sess, buf); err != nil {
+			log.Fatal(err)
+		}
+		log.Println("recv:", string(buf))
+		time.Sleep(time.Second)
 	}
 }

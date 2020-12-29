@@ -1,7 +1,6 @@
 package listener
 
 import (
-	"crypto/rand"
 	"encoding/binary"
 	"github.com/pkg/errors"
 	"github.com/zhyoulun/kcp-go/src/constant"
@@ -288,37 +287,6 @@ func serveConn(conn net.PacketConn) (*Listener, error) {
 	return l, nil
 }
 
-// Dial connects to the remote address "raddr" on the network "udp" without encryption and FEC
-//func Dial(raddr string) (net.Conn, error) { return DialWithOptions(raddr, nil, 0, 0) }
-
-// DialWithOptions connects to the remote address "raddr" on the network "udp" with packet encryption
-//
-// 'block' is the block encryption algorithm to encrypt packets.
-//
-// 'dataShards', 'parityShards' specify how many parity packets will be generated following the data packets.
-//
-// Check https://github.com/klauspost/reedsolomon for details
-func DialWithOptions(raddr string) (*session.UDPSession, error) {
-	// network type detection
-	udpaddr, err := net.ResolveUDPAddr("udp", raddr)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-	network := "udp4"
-	if udpaddr.IP.To4() == nil {
-		network = "udp"
-	}
-
-	conn, err := net.ListenUDP(network, nil)
-	if err != nil {
-		return nil, errors.WithStack(err)
-	}
-
-	var convid uint32
-	binary.Read(rand.Reader, binary.LittleEndian, &convid)
-	//return newUDPSession(convid, dataShards, parityShards, nil, conn, true, udpaddr, block), nil
-	return session.NewUDPSession(convid, nil, conn, true, udpaddr), nil
-}
 
 //// NewConn3 establishes a session and talks KCP protocol over a packet connection.
 //func NewConn3(convid uint32, raddr net.Addr, block BlockCrypt, dataShards, parityShards int, conn net.PacketConn) (*UDPSession, error) {

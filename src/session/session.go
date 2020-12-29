@@ -1,6 +1,8 @@
 package session
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"github.com/pkg/errors"
 	"github.com/zhyoulun/kcp-go/src/constant"
 	"github.com/zhyoulun/kcp-go/src/kcp"
@@ -82,6 +84,38 @@ type ListenerI interface {
 	CloseSession(net.Addr) bool
 }
 
+// Dial connects to the remote address "raddr" on the network "udp" without encryption and FEC
+//func Dial(raddr string) (net.Conn, error) { return DialWithOptions(raddr, nil, 0, 0) }
+
+// DialWithOptions connects to the remote address "raddr" on the network "udp" with packet encryption
+//
+// 'block' is the block encryption algorithm to encrypt packets.
+//
+// 'dataShards', 'parityShards' specify how many parity packets will be generated following the data packets.
+//
+// Check https://github.com/klauspost/reedsolomon for details
+func DialWithOptions(raddr string) (*UDPSession, error) {
+	// network type detection
+	udpaddr, err := net.ResolveUDPAddr("udp", raddr)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	network := "udp4"
+	if udpaddr.IP.To4() == nil {
+		network = "udp"
+	}
+
+	conn, err := net.ListenUDP(network, nil)
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+
+	var convid uint32
+	binary.Read(rand.Reader, binary.LittleEndian, &convid)
+	//return newUDPSession(convid, dataShards, parityShards, nil, conn, true, udpaddr, block), nil
+	return NewUDPSession(convid, nil, conn, true, udpaddr), nil
+}
+
 // newUDPSession create a new udp session for client or server
 //func newUDPSession(conv uint32, dataShards, parityShards int, l *Listener, conn net.PacketConn, ownConn bool, remote net.Addr, block BlockCrypt) *UDPSession {
 
@@ -140,9 +174,10 @@ func NewUDPSession(conv uint32, l ListenerI, conn net.PacketConn, ownConn bool, 
 	if sess.l == nil { // it's a client connection
 		go sess.readLoop()
 		//atomic.AddUint64(&DefaultSnmp.ActiveOpens, 1)
-	} else {
-		//atomic.AddUint64(&DefaultSnmp.PassiveOpens, 1)
 	}
+	//else {
+	//	//atomic.AddUint64(&DefaultSnmp.PassiveOpens, 1)
+	//}
 
 	// start per-session updater
 	util.SystemTimedSched.Put(sess.update, time.Now())
@@ -757,10 +792,6 @@ func (s *UDPSession) defaultTx(txqueue []ipv4.Message) {
 
 //client read loop
 func (s *UDPSession) readLoop() {
-	s.defaultReadLoop()
-}
-
-func (s *UDPSession) defaultReadLoop() {
 	buf := make([]byte, constant.MtuLimit)
 	var src string
 	for {
