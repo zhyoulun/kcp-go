@@ -39,6 +39,26 @@ type (
 	}
 )
 
+
+//server read loop
+func (l *Listener) monitor() {
+	l.defaultMonitor()
+}
+
+// 从PacketConn中持续读取数据包，数据包最大mtuLimit=1500
+func (l *Listener) defaultMonitor() {
+	buf := make([]byte, constant.MtuLimit)
+	for {
+		if n, remoteAddr, err := l.conn.ReadFrom(buf); err == nil {
+			l.packetInput(buf[:n], remoteAddr)
+		} else {
+			l.notifyReadError(errors.WithStack(err))
+			return
+		}
+	}
+}
+
+
 // packet input stage
 func (l *Listener) packetInput(data []byte, remoteAddr net.Addr) {
 	decrypted := false
@@ -340,21 +360,3 @@ func DialWithOptions(raddr string) (*session.UDPSession, error) {
 //	}
 //	return NewConn2(udpaddr, block, dataShards, parityShards, conn)
 //}
-
-//server read loop
-func (l *Listener) monitor() {
-	l.defaultMonitor()
-}
-
-// 从PacketConn中持续读取数据包，数据包最大mtuLimit=1500
-func (l *Listener) defaultMonitor() {
-	buf := make([]byte, constant.MtuLimit)
-	for {
-		if n, remoteAddr, err := l.conn.ReadFrom(buf); err == nil {
-			l.packetInput(buf[:n], remoteAddr)
-		} else {
-			l.notifyReadError(errors.WithStack(err))
-			return
-		}
-	}
-}

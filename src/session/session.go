@@ -141,9 +141,10 @@ func NewUDPSession(conv uint32, l ListenerI, conn net.PacketConn, ownConn bool, 
 	if sess.l == nil { // it's a client connection
 		go sess.readLoop()
 		//atomic.AddUint64(&DefaultSnmp.ActiveOpens, 1)
-	} else {
-		//atomic.AddUint64(&DefaultSnmp.PassiveOpens, 1)
 	}
+	//else {
+	//atomic.AddUint64(&DefaultSnmp.PassiveOpens, 1)
+	//}
 
 	// start per-session updater
 	util.SystemTimedSched.Put(sess.update, time.Now())
