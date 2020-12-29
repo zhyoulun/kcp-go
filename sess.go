@@ -39,7 +39,7 @@ const (
 
 var (
 	//errInvalidOperation = errors.New("invalid operation")
-	errTimeout          = errors.New("timeout")
+	errTimeout = errors.New("timeout")
 )
 
 var (
@@ -80,7 +80,7 @@ type (
 		//headerSize int       // the header size additional to a KCP frame
 		//ackNoDelay bool      // send ack immediately for each incoming packet(testing purpose)
 		//writeDelay bool // delay kcp.flush() for Write() for bulk transfer
-		dup        int  // duplicate udp packets(testing purpose)
+		//dup        int  // duplicate udp packets(testing purpose)
 
 		// notifications
 		die          chan struct{} // notify current session has Closed
@@ -568,13 +568,13 @@ func (s *UDPSession) output(buf []byte) {
 
 	// 4. TxQueue
 	var msg ipv4.Message
-	for i := 0; i < s.dup+1; i++ {
-		bts := xmitBuf.Get().([]byte)[:len(buf)]
-		copy(bts, buf)
-		msg.Buffers = [][]byte{bts}
-		msg.Addr = s.remote
-		s.txqueue = append(s.txqueue, msg)
-	}
+	//for i := 0; i < s.dup+1; i++ {
+	bts := xmitBuf.Get().([]byte)[:len(buf)]
+	copy(bts, buf)
+	msg.Buffers = [][]byte{bts}
+	msg.Addr = s.remote
+	s.txqueue = append(s.txqueue, msg)
+	//}
 
 	//for k := range ecc {
 	//	bts := xmitBuf.Get().([]byte)[:len(ecc[k])]
@@ -604,15 +604,15 @@ func (s *UDPSession) update() {
 	}
 }
 
-// GetConv gets conversation id of a session
-func (s *UDPSession) GetConv() uint32 { return s.kcp.conv }
+//// GetConv gets conversation id of a session
+//func (s *UDPSession) GetConv() uint32 { return s.kcp.conv }
 
-// GetRTO gets current rto of the session
-func (s *UDPSession) GetRTO() uint32 {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.kcp.rx_rto
-}
+//// GetRTO gets current rto of the session
+//func (s *UDPSession) GetRTO() uint32 {
+//	s.mu.Lock()
+//	defer s.mu.Unlock()
+//	return s.kcp.rx_rto
+//}
 
 //// GetSRTT gets current srtt of the session
 //func (s *UDPSession) GetSRTT() int32 {

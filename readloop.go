@@ -9,6 +9,7 @@ func (s *UDPSession) readLoop() {
 	s.defaultReadLoop()
 }
 
+//server read loop
 func (l *Listener) monitor() {
 	l.defaultMonitor()
 }
