@@ -12,14 +12,13 @@ import (
 	"time"
 )
 
-
 type (
 	// UDPSession defines a KCP session implemented by UDP
 	UDPSession struct {
 		conn    net.PacketConn // the underlying packet connection
 		ownConn bool           // true if we created conn internally, false if provided by caller
 		Kcp     *KCP           // KCP ARQ protocol
-		l       *Listener      // pointing to the Listener object if it's been accepted by a Listener
+		l       ListenerI      // pointing to the Listener object if it's been accepted by a Listener
 		//block   BlockCrypt     // block encryption object
 
 		// kcp receiving is based on packets
@@ -78,10 +77,14 @@ type (
 	//}
 )
 
+type ListenerI interface {
+	CloseSession(net.Addr) bool
+}
+
 // newUDPSession create a new udp session for client or server
 //func newUDPSession(conv uint32, dataShards, parityShards int, l *Listener, conn net.PacketConn, ownConn bool, remote net.Addr, block BlockCrypt) *UDPSession {
 
-func NewUDPSession(conv uint32, l *Listener, conn net.PacketConn, ownConn bool, remote net.Addr) *UDPSession {
+func NewUDPSession(conv uint32, l ListenerI, conn net.PacketConn, ownConn bool, remote net.Addr) *UDPSession {
 	sess := new(UDPSession)
 	sess.die = make(chan struct{})
 	//sess.nonce = new(nonceAES128)
@@ -328,7 +331,7 @@ func (s *UDPSession) Close() error {
 		s.mu.Unlock()
 
 		if s.l != nil { // belongs to listener
-			s.l.closeSession(s.remote)
+			s.l.CloseSession(s.remote)
 			return nil
 		} else if s.ownConn { // client socket close
 			return s.conn.Close()
