@@ -2,6 +2,7 @@ package kcp
 
 import (
 	"encoding/binary"
+	"github.com/zhyoulun/kcp-go/src/util"
 	"time"
 )
 
@@ -136,7 +137,7 @@ func (seg *segment) encode(ptr []byte) []byte {
 
 // KCP defines a single KCP connection
 type KCP struct {
-	conv uint32 //conversation 会话
+	Conv uint32 //conversation 会话
 	//mtu   uint32 //默认值IKCP_MTU_DEF（1400），需要函数SetMtu设置，最大传输单元（英语：Maximum Transmission Unit，缩写MTU）
 	//mss   uint32 //默认值kcp.mtu - IKCP_OVERHEAD（24），最大分段大小（Maximum Segment Size）
 	//state uint32
@@ -201,7 +202,7 @@ type ackItem struct {
 
 func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp := new(KCP)
-	kcp.conv = conv
+	kcp.Conv = conv
 	//kcp.snd_wnd = IKCP_WND_SND
 	kcp.rcv_wnd = IKCP_WND_RCV
 	kcp.rmt_wnd = IKCP_WND_RCV
@@ -220,14 +221,14 @@ func NewKCP(conv uint32, output output_callback) *KCP {
 
 // newSegment creates a KCP segment
 func (kcp *KCP) newSegment(size int) (seg segment) {
-	seg.data = xmitBuf.Get().([]byte)[:size]
+	seg.data = util.XmitBuf.Get().([]byte)[:size]
 	return
 }
 
 // delSegment recycles a KCP segment
 func (kcp *KCP) delSegment(seg *segment) {
 	if seg.data != nil {
-		xmitBuf.Put(seg.data)
+		util.XmitBuf.Put(seg.data)
 		seg.data = nil
 	}
 }
@@ -542,7 +543,7 @@ func (kcp *KCP) parse_data(newseg segment) bool {
 
 	if !repeat {
 		// replicate the content if it's new
-		dataCopy := xmitBuf.Get().([]byte)[:len(newseg.data)] //将mtulimit buf中的数据转存到xmitBuf缓存区中
+		dataCopy := util.XmitBuf.Get().([]byte)[:len(newseg.data)] //将mtulimit buf中的数据转存到xmitBuf缓存区中
 		copy(dataCopy, newseg.data)
 		newseg.data = dataCopy
 
@@ -605,7 +606,7 @@ func (kcp *KCP) Input(data []byte) int {
 		data = ikcp_decode32u(data, &conv)
 		//从精简版流程来看，如果是server端，这个判断一定是true
 		//如果是client端，不一定
-		if conv != kcp.conv {
+		if conv != kcp.Conv {
 			return -1
 		}
 		data = ikcp_decode8u(data, &cmd)
@@ -739,7 +740,7 @@ func (kcp *KCP) wnd_unused() uint16 {
 // flush pending data
 func (kcp *KCP) flush() uint32 {
 	var seg segment
-	seg.conv = kcp.conv
+	seg.conv = kcp.Conv
 	seg.cmd = IKCP_CMD_ACK
 	seg.wnd = kcp.wnd_unused()
 	seg.una = kcp.rcv_nxt
@@ -836,7 +837,7 @@ func (kcp *KCP) flush() uint32 {
 			break
 		}
 		newseg := kcp.snd_queue[k]
-		newseg.conv = kcp.conv
+		newseg.conv = kcp.Conv
 		newseg.cmd = IKCP_CMD_PUSH
 		newseg.sn = kcp.snd_nxt
 		kcp.snd_buf = append(kcp.snd_buf, newseg)
@@ -1141,12 +1142,12 @@ func (kcp *KCP) remove_front(q []segment, n int) []segment {
 func (kcp *KCP) ReleaseTX() {
 	for k := range kcp.snd_queue {
 		if kcp.snd_queue[k].data != nil {
-			xmitBuf.Put(kcp.snd_queue[k].data)
+			util.XmitBuf.Put(kcp.snd_queue[k].data)
 		}
 	}
 	for k := range kcp.snd_buf {
 		if kcp.snd_buf[k].data != nil {
-			xmitBuf.Put(kcp.snd_buf[k].data)
+			util.XmitBuf.Put(kcp.snd_buf[k].data)
 		}
 	}
 	kcp.snd_queue = nil

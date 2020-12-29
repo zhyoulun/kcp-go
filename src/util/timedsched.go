@@ -1,4 +1,4 @@
-package kcp
+package util
 
 import (
 	"container/heap"
