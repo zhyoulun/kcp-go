@@ -1,8 +1,9 @@
-package kcp
+package session
 
 import (
 	"github.com/pkg/errors"
 	"github.com/zhyoulun/kcp-go/src/constant"
+	"github.com/zhyoulun/kcp-go/src/kcp"
 	"github.com/zhyoulun/kcp-go/src/util"
 	"golang.org/x/net/ipv4"
 	"io"
@@ -17,7 +18,7 @@ type (
 	UDPSession struct {
 		conn    net.PacketConn // the underlying packet connection
 		ownConn bool           // true if we created conn internally, false if provided by caller
-		Kcp     *KCP           // KCP ARQ protocol
+		Kcp     *kcp.KCP       // KCP ARQ protocol
 		l       ListenerI      // pointing to the Listener object if it's been accepted by a Listener
 		//block   BlockCrypt     // block encryption object
 
@@ -128,9 +129,9 @@ func NewUDPSession(conv uint32, l ListenerI, conn net.PacketConn, ownConn bool, 
 	//	sess.headerSize += fecHeaderSizePlus2
 	//}
 
-	sess.Kcp = NewKCP(conv, func(buf []byte, size int) {
+	sess.Kcp = kcp.NewKCP(conv, func(buf []byte, size int) {
 		//if size >= IKCP_OVERHEAD+sess.headerSize {
-		if size >= IKCP_OVERHEAD {
+		if size >= kcp.IKCP_OVERHEAD {
 			sess.output(buf[:size])
 		}
 	})
@@ -239,25 +240,25 @@ func (s *UDPSession) WriteBuffers(v [][]byte) (n int, err error) {
 
 		// make sure write do not overflow the max sliding window on both side
 		waitsnd := s.Kcp.WaitSnd()
-		if waitsnd < int(IKCP_WND_SND) && waitsnd < int(s.Kcp.rmt_wnd) {
+		if waitsnd < int(kcp.IKCP_WND_SND) && waitsnd < int(s.Kcp.Rmt_wnd) {
 			for _, b := range v {
 				n += len(b)
 				for {
-					if len(b) <= IKCP_MSS {
+					if len(b) <= kcp.IKCP_MSS {
 						s.Kcp.Send(b)
 						break
 					} else {
-						s.Kcp.Send(b[:IKCP_MSS])
-						b = b[IKCP_MSS:]
+						s.Kcp.Send(b[:kcp.IKCP_MSS])
+						b = b[kcp.IKCP_MSS:]
 					}
 				}
 			}
 
 			waitsnd = s.Kcp.WaitSnd()
 			//if waitsnd >= int(s.kcp.snd_wnd) || waitsnd >= int(s.kcp.rmt_wnd) || !s.writeDelay {
-			if waitsnd >= IKCP_WND_SND || waitsnd >= int(s.Kcp.rmt_wnd) {
+			if waitsnd >= kcp.IKCP_WND_SND || waitsnd >= int(s.Kcp.Rmt_wnd) {
 				//s.kcp.flush(false)
-				s.Kcp.flush()
+				s.Kcp.Flush()
 				s.uncork()
 			}
 			s.mu.Unlock()
@@ -321,7 +322,7 @@ func (s *UDPSession) Close() error {
 		// try best to send all queued messages
 		s.mu.Lock()
 		//s.kcp.flush(false)
-		s.Kcp.flush()
+		s.Kcp.Flush()
 		s.uncork()
 		// release pending segments
 		s.Kcp.ReleaseTX()
@@ -553,9 +554,9 @@ func (s *UDPSession) update() {
 	default:
 		s.mu.Lock()
 		//interval := s.kcp.flush(false)
-		interval := s.Kcp.flush()
+		interval := s.Kcp.Flush()
 		waitsnd := s.Kcp.WaitSnd()
-		if waitsnd < IKCP_WND_SND && waitsnd < int(s.Kcp.rmt_wnd) {
+		if waitsnd < kcp.IKCP_WND_SND && waitsnd < int(s.Kcp.Rmt_wnd) {
 			s.notifyWriteEvent()
 		}
 		s.uncork()
@@ -636,7 +637,7 @@ func (s *UDPSession) packetInput(data []byte) {
 	//decrypted = true
 
 	//if decrypted && len(data) >= IKCP_OVERHEAD {
-	if len(data) >= IKCP_OVERHEAD {
+	if len(data) >= kcp.IKCP_OVERHEAD {
 		s.KcpInput(data)
 	}
 }
@@ -710,7 +711,7 @@ func (s *UDPSession) KcpInput(data []byte) {
 		s.notifyReadEvent()
 	}
 	waitsnd := s.Kcp.WaitSnd()
-	if waitsnd < IKCP_WND_SND && waitsnd < int(s.Kcp.rmt_wnd) {
+	if waitsnd < kcp.IKCP_WND_SND && waitsnd < int(s.Kcp.Rmt_wnd) {
 		s.notifyWriteEvent()
 	}
 	s.uncork()

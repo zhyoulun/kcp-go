@@ -2,11 +2,10 @@ package main
 
 import (
 	listener2 "github.com/zhyoulun/kcp-go/src/listener"
+	"github.com/zhyoulun/kcp-go/src/session"
 	"io"
 	"log"
 	"time"
-
-	"github.com/zhyoulun/kcp-go"
 )
 
 func main() {
@@ -29,7 +28,7 @@ func main() {
 }
 
 // handleEcho send back everything it received
-func handleEcho(conn *kcp.UDPSession) {
+func handleEcho(conn *session.UDPSession) {
 	buf := make([]byte, 4096)
 	for {
 		n, err := conn.Read(buf)

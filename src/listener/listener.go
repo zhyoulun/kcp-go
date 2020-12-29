@@ -4,8 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"github.com/pkg/errors"
-	"github.com/zhyoulun/kcp-go"
 	"github.com/zhyoulun/kcp-go/src/constant"
+	kcp2 "github.com/zhyoulun/kcp-go/src/kcp"
+	"github.com/zhyoulun/kcp-go/src/session"
 	"io"
 	"net"
 	"sync"
@@ -21,10 +22,10 @@ type (
 		conn net.PacketConn // the underlying packet connection
 		//ownConn      bool           // true if we created conn internally, false if provided by caller
 
-		sessions        map[string]*kcp.UDPSession // all sessions accepted by this Listener
+		sessions        map[string]*session.UDPSession // all sessions accepted by this Listener
 		sessionLock     sync.RWMutex
-		chAccepts       chan *kcp.UDPSession // Listen() backlog
-		chSessionClosed chan net.Addr        // session close queue
+		chAccepts       chan *session.UDPSession // Listen() backlog
+		chSessionClosed chan net.Addr            // session close queue
 
 		die     chan struct{} // notify the listener has closed
 		dieOnce sync.Once
@@ -57,7 +58,7 @@ func (l *Listener) packetInput(data []byte, remoteAddr net.Addr) {
 	decrypted = true
 
 	// 这里有一个问题，就是如果data的长度过短，小于24B，就直接被丢弃了
-	if decrypted && len(data) >= kcp.IKCP_OVERHEAD {
+	if decrypted && len(data) >= kcp2.IKCP_OVERHEAD {
 		l.sessionLock.RLock()
 		s, ok := l.sessions[remoteAddr.String()]
 		l.sessionLock.RUnlock()
@@ -75,7 +76,7 @@ func (l *Listener) packetInput(data []byte, remoteAddr net.Addr) {
 		//} else {
 		// packet without FEC
 		conv = binary.LittleEndian.Uint32(data)
-		sn = binary.LittleEndian.Uint32(data[kcp.IKCP_SN_OFFSET:])
+		sn = binary.LittleEndian.Uint32(data[kcp2.IKCP_SN_OFFSET:])
 		//convRecovered = true
 		//}
 
@@ -93,7 +94,7 @@ func (l *Listener) packetInput(data []byte, remoteAddr net.Addr) {
 		//	if len(l.chAccepts) < cap(l.chAccepts) { // do not let the new sessions overwhelm accept queue
 		if s == nil && len(l.chAccepts) < cap(l.chAccepts) {
 			//s := newUDPSession(conv, l.dataShards, l.parityShards, l, l.conn, false, remoteAddr, l.block)
-			s := kcp.NewUDPSession(conv, l, l.conn, false, remoteAddr)
+			s := session.NewUDPSession(conv, l, l.conn, false, remoteAddr)
 			s.KcpInput(data)
 
 			l.sessionLock.Lock()
@@ -168,7 +169,7 @@ func (l *Listener) Accept() (net.Conn, error) {
 }
 
 // AcceptKCP accepts a KCP connection
-func (l *Listener) AcceptKCP() (*kcp.UDPSession, error) {
+func (l *Listener) AcceptKCP() (*session.UDPSession, error) {
 	//var timeout <-chan time.Time
 	//if tdeadline, ok := l.rd.Load().(time.Time); ok && !tdeadline.IsZero() {
 	//	timeout = time.After(time.Until(tdeadline))
@@ -275,8 +276,8 @@ func serveConn(conn net.PacketConn) (*Listener, error) {
 	l := new(Listener)
 	l.conn = conn
 	//l.ownConn = ownConn
-	l.sessions = make(map[string]*kcp.UDPSession)
-	l.chAccepts = make(chan *kcp.UDPSession, constant.AcceptBacklog)
+	l.sessions = make(map[string]*session.UDPSession)
+	l.chAccepts = make(chan *session.UDPSession, constant.AcceptBacklog)
 	l.chSessionClosed = make(chan net.Addr)
 	l.die = make(chan struct{})
 	//l.dataShards = dataShards
@@ -297,7 +298,7 @@ func serveConn(conn net.PacketConn) (*Listener, error) {
 // 'dataShards', 'parityShards' specify how many parity packets will be generated following the data packets.
 //
 // Check https://github.com/klauspost/reedsolomon for details
-func DialWithOptions(raddr string) (*kcp.UDPSession, error) {
+func DialWithOptions(raddr string) (*session.UDPSession, error) {
 	// network type detection
 	udpaddr, err := net.ResolveUDPAddr("udp", raddr)
 	if err != nil {
@@ -316,7 +317,7 @@ func DialWithOptions(raddr string) (*kcp.UDPSession, error) {
 	var convid uint32
 	binary.Read(rand.Reader, binary.LittleEndian, &convid)
 	//return newUDPSession(convid, dataShards, parityShards, nil, conn, true, udpaddr, block), nil
-	return kcp.NewUDPSession(convid, nil, conn, true, udpaddr), nil
+	return session.NewUDPSession(convid, nil, conn, true, udpaddr), nil
 }
 
 //// NewConn3 establishes a session and talks KCP protocol over a packet connection.
