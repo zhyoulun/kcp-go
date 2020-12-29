@@ -163,12 +163,13 @@ func NewUDPSession(conv uint32, l ListenerI, conn net.PacketConn, ownConn bool, 
 	//	sess.headerSize += fecHeaderSizePlus2
 	//}
 
-	sess.Kcp = kcp.NewKCP(conv, func(buf []byte, size int) {
-		//if size >= IKCP_OVERHEAD+sess.headerSize {
-		if size >= kcp.IKCP_OVERHEAD {
-			sess.output(buf[:size])
-		}
-	})
+	//sess.Kcp = kcp.NewKCP(conv, func(buf []byte, size int) {
+	//	//if size >= IKCP_OVERHEAD+sess.headerSize {
+	//	if size >= kcp.IKCP_OVERHEAD {
+	//		sess.output(buf[:size])
+	//	}
+	//})
+	sess.Kcp = kcp.NewKCP(conv, sess)
 	//sess.kcp.ReserveBytes(sess.headerSize)
 
 	if sess.l == nil { // it's a client connection
@@ -176,7 +177,7 @@ func NewUDPSession(conv uint32, l ListenerI, conn net.PacketConn, ownConn bool, 
 		//atomic.AddUint64(&DefaultSnmp.ActiveOpens, 1)
 	}
 	//else {
-	//	//atomic.AddUint64(&DefaultSnmp.PassiveOpens, 1)
+	//atomic.AddUint64(&DefaultSnmp.PassiveOpens, 1)
 	//}
 
 	// start per-session updater
@@ -533,6 +534,13 @@ func (s *UDPSession) SetWriteDeadline(t time.Time) error {
 //	}
 //	return errInvalidOperation
 //}
+
+func (s *UDPSession) Output(buf []byte, size int) {
+	//if size >= IKCP_OVERHEAD+sess.headerSize {
+	if size >= kcp.IKCP_OVERHEAD {
+		s.output(buf[:size])
+	}
+}
 
 // post-processing for sending a packet from kcp core
 // steps:

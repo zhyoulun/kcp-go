@@ -34,37 +34,8 @@ const (
 // output_callback is a prototype which ought capture conn and call conn.Write
 type output_callback func(buf []byte, size int)
 
-
-
-// segment defines a KCP segment
-type segment struct {
-	conv     uint32
-	cmd      uint8
-	frg      uint8
-	wnd      uint16
-	ts       uint32
-	sn       uint32
-	una      uint32
-	rto      uint32
-	xmit     uint32
-	resendts uint32
-	fastack  uint32
-	acked    uint32 // mark if the seg has acked
-	data     []byte
-}
-
-// encode a segment into buffer
-func (seg *segment) encode(ptr []byte) []byte {
-	ptr = util.Ikcp_encode32u(ptr, seg.conv)
-	ptr = util.Ikcp_encode8u(ptr, seg.cmd)
-	ptr = util.Ikcp_encode8u(ptr, seg.frg)
-	ptr = util.Ikcp_encode16u(ptr, seg.wnd)
-	ptr = util.Ikcp_encode32u(ptr, seg.ts)
-	ptr = util.Ikcp_encode32u(ptr, seg.sn)
-	ptr = util.Ikcp_encode32u(ptr, seg.una)
-	ptr = util.Ikcp_encode32u(ptr, uint32(len(seg.data)))
-	//atomic.AddUint64(&DefaultSnmp.OutSegs, 1)
-	return ptr
+type SessionI interface {
+	Output(buf []byte, size int)
 }
 
 // KCP defines a single KCP connection
@@ -103,7 +74,7 @@ type KCP struct {
 	probe_wait uint32
 
 	//dead_link uint32
-	incr      uint32
+	incr uint32
 
 	//fastresend int32
 	//nocwnd     int32
@@ -118,7 +89,8 @@ type KCP struct {
 
 	buffer []byte //初始空间mtu，make([]byte, kcp.mtu)
 	//reserved int
-	output output_callback
+	//output output_callback
+	sessionI SessionI
 }
 
 type ackItem struct {
@@ -132,7 +104,7 @@ type ackItem struct {
 //
 // 'output' function will be called whenever these is data to be sent on wire.
 
-func NewKCP(conv uint32, output output_callback) *KCP {
+func NewKCP(conv uint32, sessionI SessionI) *KCP {
 	kcp := new(KCP)
 	kcp.Conv = conv
 	//kcp.snd_wnd = IKCP_WND_SND
@@ -147,7 +119,7 @@ func NewKCP(conv uint32, output output_callback) *KCP {
 	kcp.ts_flush = IKCP_INTERVAL
 	kcp.ssthresh = IKCP_THRESH_INIT
 	//kcp.dead_link = IKCP_DEADLINK
-	kcp.output = output
+	kcp.sessionI = sessionI
 	return kcp
 }
 
@@ -685,7 +657,8 @@ func (kcp *KCP) Flush() uint32 {
 	makeSpace := func(space int) {
 		size := len(buffer) - len(ptr)
 		if size+space > IKCP_MTU_DEF {
-			kcp.output(buffer, size)
+			//kcp.output(buffer, size)
+			kcp.sessionI.Output(buffer, size)
 			//ptr = buffer[kcp.reserved:]
 			ptr = buffer //写出之后，重新归0
 		}
@@ -696,7 +669,8 @@ func (kcp *KCP) Flush() uint32 {
 		size := len(buffer) - len(ptr)
 		//if size > kcp.reserved {
 		if size > 0 {
-			kcp.output(buffer, size)
+			//kcp.output(buffer, size)
+			kcp.sessionI.Output(buffer, size)
 		}
 	}
 
